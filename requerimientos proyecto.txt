@@ -1,0 +1,20 @@
+
+
+Requerimientos proyecto Android:
+
+
+- Lo mismo que en Diseño Web con algunas diferencias:
+
+* Funciones cambiadas
+
+- La pantalla de Aprobadores por sitio será un GET method básicamente
+en vez de los mensajes SMS que se habían implementado previamente
+
+
+*Funciones descartadas:
+
+- SMS (Se quedan los aprobadores por sitio)
+- Eliminar registros
+- Ver ubicaciones de Google Maps
+- Descargar exceles de las tablas
+- Quitar pantalla de configuracion

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="proyectoAndroid.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="2731"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="refacciones" custom_title="0" dock_id="1" table="4,11:mainrefacciones"/><dock_state state="000000ff00000000fd00000001000000020000039100000258fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000003910000011e00ffffff000002690000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="refacciones" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="35"/><column index="2" value="300"/><column index="3" value="39"/><column index="4" value="39"/><column index="5" value="59"/><column index="6" value="67"/><column index="7" value="46"/><column index="8" value="57"/><column index="9" value="77"/><column index="10" value="156"/><column index="11" value="110"/><column index="12" value="98"/><column index="13" value="46"/><column index="14" value="85"/><column index="15" value="108"/><column index="16" value="85"/><column index="17" value="79"/><column index="18" value="207"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">INSERT INTO refacciones (
+    descripcion, costo, area, consumo, frecuencia, unidad, cantidad,
+    observacion, numero_parte_proveedor, marca_proveedor, equipos_a_usar,
+    familia, reemplazable, reduce_velocidad, existe_riesgo, nacionalidad, pagina_web
+) VALUES
+(
+    'Bomba Hidraulica - Hydraulic Pump YN10V00018F1',
+    NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '48291', NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL,
+    'https://shorturl.at/IrrZn'
+),
+(
+    'Compresor de Aire - Industrial Rotary air Screw Type Compressor 18.5 kw',
+    NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '73925', NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL,
+    'https://shorturl.at/NnSBO'
+),
+(
+    'Válvulas de control - COKVER Electric Actuated Pvc Ball Valve Motorized Plastic',
+    NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '15684', NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL,
+    'https://shorturl.at/cV9HG'
+),
+(
+    'Mangueras Industriales - High Pressure Hydraulic Rubber',
+    NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '82467', NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL,
+    'https://shorturl.at/qPVZn'
+),
+(
+    'Filtros de Agua - Advanced Self-Cleaning Water Filter',
+    NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '50312', NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL,
+    'https://shorturl.at/sAT48'
+);</sql><current_tab id="0"/></tab_sql></sqlb_project>
