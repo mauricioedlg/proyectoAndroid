@@ -39,7 +39,8 @@ fun AltasGlobalesScreen() {
                 Column {
                     Row(Modifier.background(Color(0xFF003366))) {
                         TablaHeader("ID", 60)
-                        TablaHeader("Aprobación MTTO", 100) // Nueva columna
+                        TablaHeader("Aprob. MTTO", 100)
+                        TablaHeader("Aprob. PLANTA", 100) // 🔥 Nueva columna
                         TablaHeader("Descripción", 200)
                         TablaHeader("Costo", 100)
                         TablaHeader("Área", 120)
@@ -52,6 +53,7 @@ fun AltasGlobalesScreen() {
                             Row(Modifier.background(Color(0x22003366))) {
                                 TablaCell(ref["id"]?.toString(), 60)
                                 TablaCell(ref["aprobacion_mtto"]?.toString(), 100)
+                                TablaCell(ref["aprobacion_planta"]?.toString(), 100) // 🔥
                                 TablaCell(ref["descripcion"]?.toString(), 200)
                                 TablaCell(ref["costo"]?.toString(), 100)
                                 TablaCell(ref["area"]?.toString(), 120)

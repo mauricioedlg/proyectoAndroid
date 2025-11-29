@@ -31,7 +31,6 @@ fun MainScreen() {
     val scope = rememberCoroutineScope()
     var currentScreen by remember { mutableStateOf("Inicio") }
 
-    // Contador de notificaciones
     var notificacionesCount by remember { mutableStateOf(0) }
 
     fun actualizarContador() {
@@ -44,7 +43,8 @@ fun MainScreen() {
 
     val menuItems = remember(currentUser) {
         val items = mutableListOf("Inicio", "Formulario", "Mis Altas", "Altas Globales", "Corregir refacciones")
-        if (currentUser.rol == 1 || currentUser.rol == 0) {
+        // 🔥 AHORA TAMBIÉN ROL 2 (PLANTA) VE ESTO
+        if (currentUser.rol == 1 || currentUser.rol == 0 || currentUser.rol == 2) {
             items.add("Aprobaciones pendientes")
         }
         items.add("Cerrar Sesión")
@@ -114,11 +114,11 @@ fun MainScreen() {
                         "Mis Altas" -> MisAltasScreen(usuarioId = currentUser.id)
                         "Altas Globales" -> AltasGlobalesScreen()
                         "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
-                        "Aprobaciones pendientes" -> AprobacionesPendientesScreen()
+                        "Aprobaciones pendientes" -> AprobacionesPendientesScreen(userRole = currentUser.rol) // Pasamos rol
                         "Notificaciones" -> NotificacionesScreen(
                             usuarioId = currentUser.id,
                             userRole = currentUser.rol,
-                            onNavigate = { nuevaPantalla -> currentScreen = nuevaPantalla } // 🔥 Navegación desde notif
+                            onNavigate = { nuevaPantalla -> currentScreen = nuevaPantalla }
                         )
                         else -> Text("Pantalla no encontrada", color = Color.Red)
                     }

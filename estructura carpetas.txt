@@ -4,6 +4,7 @@ Requerimientos proyecto Android:
 
 
 
+
 --- app
 |---- manifests
 |	       |-- AndroidManifest.xml
@@ -17,6 +18,10 @@ Requerimientos proyecto Android:
 |					|	     |---EditarRefaccionForm.kt
 |					|	     |---FormularioScreen.kt
 |					|	     |---MisAltasScreen.kt
+|					|	     |---LoginScreen.kt
+|					|	     |---MisAltasScreen.kt
+|					|	     |---NotificacionesScreen.kt
+|					|	     |---AprobacionesPendientesScreen.kt
 |					|--- ui.theme
 |					|	     |
 |					|	     |---Color.kt
@@ -49,7 +54,7 @@ SQL LITE:
 
 
 CREATE TABLE "refacciones" (
-	"id"	INTEGER UNIQUE,
+	"id"	INTEGER NOT NULL,
 	"descripcion"	TEXT,
 	"costo"	REAL,
 	"area"	TEXT,
@@ -67,9 +72,13 @@ CREATE TABLE "refacciones" (
 	"existe_riesgo"	TEXT,
 	"nacionalidad"	TEXT,
 	"pagina_web"	TEXT,
-	"foto"	BLOB,
-	PRIMARY KEY("id" AUTOINCREMENT)
+	"usuario_id"	INTEGER NOT NULL DEFAULT 1,
+	"aprobacion_mtto"	TEXT DEFAULT 'PENDIENTE',
+	"aprobacion_planta"	TEXT DEFAULT 'PENDIENTE', (SEGUNDO FILTRO DE APROBACION)
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("usuario_id") REFERENCES "usuarios"("UsuarioID")
 );
+
 
 
 CREATE TABLE "usuarios" (
@@ -85,6 +94,22 @@ CREATE TABLE "usuarios" (
 	PRIMARY KEY("UsuarioID" AUTOINCREMENT)
 );
 
+
+
+CREATE TABLE "notificaciones" (
+	"id"	INTEGER,
+	"usuario_destinoa_id"	INTEGER NOT NULL,
+	"mensaje"	TEXT NOT NULL,
+	"refaccion_id"	INTEGER,
+	"leido"	INTEGER DEFAULT 0,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("usuario_destinoa_id") REFERENCES "usuarios"("UsuarioID")
+);
+
+
+
+UsuarioID	Username	Correo	Contrasena	Nombre	Apellidos	Rol	DescripcionRol	NumeroDeSitio
+9	ricardo.medrano	ricardo.medrano@clarios.com	celayaPlanta	Ricardo	Medrano	2	Gerente Planta	13
 
 
 
@@ -128,6 +153,893 @@ AndroidManifest.xml:
 
 
 
+
+DataBaseManager.kt:
+
+
+ckage com.example.actividad7
+
+import android.content.ContentValues
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+
+data class Usuario(
+    val id: Int,
+    val nombre: String,
+    val username: String,
+    val rol: Int
+)
+
+class DatabaseManager(context: Context) :
+    SQLiteOpenHelper(context, "proyectoAndroid.db", null, 12) {
+
+    override fun onCreate(db: SQLiteDatabase) { /* Se maneja en DBHelper */ }
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) { /* Se maneja en DBHelper */ }
+
+    // LOGIN
+    fun validarUsuarioPorUsername(username: String, password: String): Usuario? {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT UsuarioID, Nombre, Username, Rol FROM usuarios WHERE Username = ? AND Contrasena = ?",
+            arrayOf(username, password)
+        )
+        return if (cursor.moveToFirst()) {
+            val user = Usuario(
+                id = cursor.getInt(0),
+                nombre = cursor.getString(1),
+                username = cursor.getString(2),
+                rol = cursor.getInt(3)
+            )
+            cursor.close()
+            user
+        } else {
+            cursor.close()
+            null
+        }
+    }
+
+    // ==========================================
+    // NOTIFICACIONES
+    // ==========================================
+
+    private fun crearNotificacion(db: SQLiteDatabase, usuarioDestinoId: Int, mensaje: String, refaccionId: Long) {
+        val values = ContentValues().apply {
+            put("usuario_destinoa_id", usuarioDestinoId)
+            put("mensaje", mensaje)
+            put("refaccion_id", refaccionId)
+            put("leido", 0)
+        }
+        db.insert("notificaciones", null, values)
+    }
+
+    fun obtenerNotificaciones(usuarioId: Int): List<Map<String, Any>> {
+        val db = readableDatabase
+        val lista = mutableListOf<Map<String, Any>>()
+        val cursor = db.rawQuery(
+            "SELECT * FROM notificaciones WHERE usuario_destinoa_id = ? ORDER BY id DESC",
+            arrayOf(usuarioId.toString())
+        )
+        if (cursor.moveToFirst()) {
+            do {
+                val mapa = mutableMapOf<String, Any>()
+                mapa["id"] = cursor.getInt(cursor.getColumnIndexOrThrow("id"))
+                mapa["mensaje"] = cursor.getString(cursor.getColumnIndexOrThrow("mensaje"))
+                mapa["leido"] = cursor.getInt(cursor.getColumnIndexOrThrow("leido"))
+                val refIdIndex = cursor.getColumnIndex("refaccion_id")
+                if(refIdIndex != -1) mapa["refaccion_id"] = cursor.getInt(refIdIndex)
+
+                lista.add(mapa)
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        return lista
+    }
+
+    fun contarNotificacionesNoLeidas(usuarioId: Int): Int {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT COUNT(*) FROM notificaciones WHERE usuario_destinoa_id = ? AND leido = 0",
+            arrayOf(usuarioId.toString())
+        )
+        var count = 0
+        if (cursor.moveToFirst()) count = cursor.getInt(0)
+        cursor.close()
+        return count
+    }
+
+    fun marcarNotificacionesComoLeidas(usuarioId: Int) {
+        val db = writableDatabase
+        val values = ContentValues().apply { put("leido", 1) }
+        db.update("notificaciones", values, "usuario_destinoa_id = ?", arrayOf(usuarioId.toString()))
+    }
+
+    fun eliminarNotificacion(notificacionId: Int) {
+        val db = writableDatabase
+        db.delete("notificaciones", "id = ?", arrayOf(notificacionId.toString()))
+    }
+
+    // ==========================================
+    // REFACCIONES + FLUJO DE APROBACIÓN
+    // ==========================================
+
+    fun insertarRefaccion(datos: Map<String, Any?>): Long {
+        val db = writableDatabase
+        val values = ContentValues()
+        datos.forEach { (key, value) ->
+            if (value != null) {
+                when (value) {
+                    is String -> values.put(key, value)
+                    is Int -> values.put(key, value)
+                    is Double -> values.put(key, value)
+                }
+            } else values.putNull(key)
+        }
+
+        return try {
+            val id = db.insertOrThrow("refacciones", null, values)
+            if (id != -1L) {
+                // Paso 1: Notificar SIEMPRE al Gerente Mantenimiento (Rol 1) primero
+                val cursorGerente = db.rawQuery("SELECT UsuarioID FROM usuarios WHERE Rol = 1 LIMIT 1", null)
+                if (cursorGerente.moveToFirst()) {
+                    val gerenteId = cursorGerente.getInt(0)
+                    val descripcion = datos["descripcion"] ?: "Refacción"
+                    crearNotificacion(db, gerenteId, "Nueva solicitud pendiente: $descripcion", id)
+                }
+                cursorGerente.close()
+            }
+            id
+        } catch (e: Exception) {
+            -1L
+        }
+    }
+
+    // 🔥 OBTENER PENDIENTES SEGÚN ROL
+    fun obtenerPendientesAprobacion(rolUsuario: Int): List<Map<String, Any?>> {
+        val db = readableDatabase
+        val lista = mutableListOf<Map<String, Any?>>()
+
+        // Lógica de filtrado
+        val query = when(rolUsuario) {
+            1 -> "SELECT * FROM refacciones WHERE aprobacion_mtto = 'PENDIENTE'" // Mantenimiento
+            2 -> "SELECT * FROM refacciones WHERE aprobacion_mtto = 'SI' AND aprobacion_planta = 'PENDIENTE'" // Planta (Solo si Mtto ya aprobó)
+            0 -> "SELECT * FROM refacciones WHERE aprobacion_mtto = 'PENDIENTE' OR (aprobacion_mtto = 'SI' AND aprobacion_planta = 'PENDIENTE')" // Admin ve todo
+            else -> "SELECT * FROM refacciones WHERE 1=0" // Nadie más ve nada
+        }
+
+        val cursor = db.rawQuery(query, null)
+        if (cursor.moveToFirst()) {
+            do { lista.add(cursorToMap(cursor)) } while (cursor.moveToNext())
+        }
+        cursor.close()
+        return lista
+    }
+
+    // 🔥 ACTUALIZAR ESTADO (FLUJO DOBLE)
+    fun actualizarEstadoAprobacion(idRefaccion: Int, nuevoEstado: String, rolUsuario: Int): Boolean {
+        val db = writableDatabase
+
+        // 1. Datos previos
+        var usuarioDueñoId = -1
+        var descripcionRefaccion = ""
+        val cursor = db.rawQuery("SELECT usuario_id, descripcion FROM refacciones WHERE id = ?", arrayOf(idRefaccion.toString()))
+        if (cursor.moveToFirst()) {
+            usuarioDueñoId = cursor.getInt(0)
+            descripcionRefaccion = cursor.getString(1)
+        }
+        cursor.close()
+
+        val values = ContentValues()
+
+        // 2. Determinar qué columna actualizar según el rol
+        if (rolUsuario == 1 || rolUsuario == 0) {
+            // Es Mantenimiento
+            values.put("aprobacion_mtto", nuevoEstado)
+            // Si rechaza, también matamos la de planta por si acaso
+            if (nuevoEstado == "NO") values.put("aprobacion_planta", "NO")
+        } else if (rolUsuario == 2) {
+            // Es Planta
+            values.put("aprobacion_planta", nuevoEstado)
+        }
+
+        val filas = db.update("refacciones", values, "id = ?", arrayOf(idRefaccion.toString()))
+
+        if (filas > 0) {
+            // Borrar notificación actual (del gerente que acaba de aprobar/rechazar)
+            db.delete("notificaciones", "refaccion_id = ?", arrayOf(idRefaccion.toString()))
+
+            // LÓGICA DE NOTIFICACIÓN SIGUIENTE
+            if (rolUsuario == 1 || rolUsuario == 0) {
+                // --- ACCIÓN DE MANTENIMIENTO ---
+                if (nuevoEstado == "SI") {
+                    // Aprobó Mtto -> Notificar a PLANTA (Rol 2)
+                    val cursorPlanta = db.rawQuery("SELECT UsuarioID FROM usuarios WHERE Rol = 2 LIMIT 1", null)
+                    if (cursorPlanta.moveToFirst()) {
+                        val plantaId = cursorPlanta.getInt(0)
+                        crearNotificacion(db, plantaId, "Solicitud aprobada por Mtto. Pendiente aprobación Planta: $descripcionRefaccion", idRefaccion.toLong())
+                    }
+                    cursorPlanta.close()
+                } else {
+                    // Rechazó Mtto -> Notificar al USUARIO
+                    crearNotificacion(db, usuarioDueñoId, "Tu alta '$descripcionRefaccion' fue RECHAZADA por Mantenimiento.", idRefaccion.toLong())
+                }
+            } else if (rolUsuario == 2) {
+                // --- ACCIÓN DE PLANTA ---
+                if (nuevoEstado == "SI") {
+                    // Aprobó Planta -> Notificar al USUARIO (Éxito total)
+                    crearNotificacion(db, usuarioDueñoId, "¡Felicidades! Tu alta '$descripcionRefaccion' fue APROBADA por Planta.", idRefaccion.toLong())
+                } else {
+                    // Rechazó Planta -> Notificar al USUARIO
+                    crearNotificacion(db, usuarioDueñoId, "Tu alta '$descripcionRefaccion' fue RECHAZADA por Planta.", idRefaccion.toLong())
+                }
+            }
+        }
+
+        return filas > 0
+    }
+
+    // (Resto de métodos estándar sin cambios lógicos graves, solo mapeo)
+    fun actualizarRefaccion(id: String, datos: Map<String, Any?>): Boolean {
+        val db = writableDatabase
+        val values = ContentValues()
+        datos.forEach { (key, value) ->
+            if (value != null) {
+                when (value) {
+                    is String -> values.put(key, value)
+                    is Int -> values.put(key, value)
+                    is Double -> values.put(key, value)
+                }
+            } else values.putNull(key)
+        }
+        return db.update("refacciones", values, "id = ?", arrayOf(id)) > 0
+    }
+
+    fun obtenerRefacciones(): List<Map<String, Any?>> {
+        val db = readableDatabase
+        val lista = mutableListOf<Map<String, Any?>>()
+        val cursor = db.rawQuery("SELECT * FROM refacciones", null)
+        if (cursor.moveToFirst()) {
+            do { lista.add(cursorToMap(cursor)) } while (cursor.moveToNext())
+        }
+        cursor.close()
+        return lista
+    }
+
+    fun obtenerRefaccionesPorUsuario(usuarioId: Int): List<Map<String, Any?>> {
+        val db = readableDatabase
+        val lista = mutableListOf<Map<String, Any?>>()
+        val cursor = db.rawQuery("SELECT * FROM refacciones WHERE usuario_id = ?", arrayOf(usuarioId.toString()))
+        if (cursor.moveToFirst()) {
+            do { lista.add(cursorToMap(cursor)) } while (cursor.moveToNext())
+        }
+        cursor.close()
+        return lista
+    }
+
+    private fun cursorToMap(cursor: android.database.Cursor): Map<String, Any?> {
+        val columnas = cursor.columnNames
+        val mapa = mutableMapOf<String, Any?>()
+        columnas.forEach { col ->
+            val index = cursor.getColumnIndex(col)
+            mapa[col] = when (cursor.getType(index)) {
+                android.database.Cursor.FIELD_TYPE_STRING -> cursor.getString(index)
+                android.database.Cursor.FIELD_TYPE_INTEGER -> cursor.getInt(index)
+                android.database.Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(index)
+                android.database.Cursor.FIELD_TYPE_BLOB -> cursor.getBlob(index)
+                else -> null
+            }
+        }
+        if (mapa["aprobacion_mtto"] == null) mapa["aprobacion_mtto"] = "PENDIENTE"
+        if (mapa["aprobacion_planta"] == null) mapa["aprobacion_planta"] = "PENDIENTE"
+        return mapa
+    }
+}
+
+
+
+DataBaseUtils.kt:
+
+
+package com.example.actividad7
+
+import android.content.Context
+import java.io.FileOutputStream
+
+object DataBaseUtils {
+    fun copiarBaseDatosSiNoExiste(context: Context) {
+        val dbFile = context.getDatabasePath("proyectoAndroid.db")
+
+        if (!dbFile.exists()) {
+            dbFile.parentFile?.mkdirs()
+            try {
+                // Asegúrate de que "proyectoAndroid.db" esté en la carpeta src/main/assets/
+                context.assets.open("proyectoAndroid.db").use { input ->
+                    FileOutputStream(dbFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
+
+
+
+DBHelper.kt:
+
+
+
+package com.example.actividad7
+
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+
+class DBHelper(context: Context) : SQLiteOpenHelper(
+    context,
+    "proyectoAndroid.db",
+    null,
+    12 // 🔥 Versión 12: Agregamos aprobacion_planta
+) {
+    override fun onCreate(db: SQLiteDatabase) {
+        crearTablaUsuarios(db)
+        crearTablaRefacciones(db)
+        crearTablaNotificaciones(db)
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("DROP TABLE IF EXISTS refacciones")
+        db.execSQL("DROP TABLE IF EXISTS notificaciones")
+
+        crearTablaRefacciones(db)
+        crearTablaNotificaciones(db)
+        crearTablaUsuarios(db)
+    }
+
+    private fun crearTablaUsuarios(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                UsuarioID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Username TEXT NOT NULL UNIQUE,
+                Correo TEXT NOT NULL UNIQUE,
+                Contrasena TEXT NOT NULL,
+                Nombre TEXT NOT NULL,
+                Apellidos TEXT NOT NULL,
+                Rol INTEGER NOT NULL,
+                DescripcionRol TEXT,
+                NumeroDeSitio INTEGER NOT NULL
+            );
+        """.trimIndent())
+    }
+
+    private fun crearTablaRefacciones(db: SQLiteDatabase) {
+        // 🔥 Agregamos aprobacion_planta
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS refacciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                descripcion TEXT,
+                costo REAL,
+                area TEXT,
+                consumo TEXT,
+                frecuencia TEXT,
+                unidad TEXT,
+                cantidad INTEGER,
+                observacion TEXT,
+                numero_parte_proveedor TEXT NOT NULL UNIQUE,
+                marca_proveedor TEXT,
+                equipos_a_usar TEXT,
+                familia TEXT,
+                reemplazable TEXT,
+                reduce_velocidad TEXT,
+                existe_riesgo TEXT,
+                nacionalidad TEXT,
+                pagina_web TEXT,
+                usuario_id INTEGER NOT NULL DEFAULT 1,
+                aprobacion_mtto TEXT DEFAULT 'PENDIENTE',
+                aprobacion_planta TEXT DEFAULT 'PENDIENTE',
+                FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
+            );
+        """.trimIndent())
+    }
+
+    private fun crearTablaNotificaciones(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS notificaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_destinoa_id INTEGER NOT NULL,
+                mensaje TEXT NOT NULL,
+                refaccion_id INTEGER, 
+                leido INTEGER DEFAULT 0,
+                FOREIGN KEY(usuario_destinoa_id) REFERENCES usuarios(UsuarioID)
+            );
+        """.trimIndent())
+    }
+}
+
+
+
+
+MainActivity.kt:
+
+
+package com.example.actividad7
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import com.example.actividad7.ui.theme.Actividad7Theme
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Corrección: Aseguramos que el nombre coincida con tu archivo (DataBaseUtils o DatabaseUtils)
+        // Si tu archivo se llama DataBaseUtils.kt, usa DataBaseUtils.
+        // Si no tienes este archivo, avísame y te lo genero.
+        try {
+            DataBaseUtils.copiarBaseDatosSiNoExiste(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        setContent {
+            Actividad7Theme {
+                MainScreen()
+            }
+        }
+    }
+}
+
+
+
+MainScreen.kt:
+
+
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package com.example.actividad7
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+
+import com.example.actividad7.screens.*
+
+@Composable
+fun MainScreen() {
+    val context = LocalContext.current
+    val dbManager = remember { DatabaseManager(context) }
+
+    val defaultUser = Usuario(id = 0, nombre = "Invitado", username = "invitado", rol = -1)
+    var currentUser by remember { mutableStateOf(defaultUser) }
+    var isAuthenticated by remember { mutableStateOf(false) }
+
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var currentScreen by remember { mutableStateOf("Inicio") }
+
+    var notificacionesCount by remember { mutableStateOf(0) }
+
+    fun actualizarContador() {
+        if (isAuthenticated) {
+            notificacionesCount = dbManager.contarNotificacionesNoLeidas(currentUser.id)
+        }
+    }
+
+    LaunchedEffect(currentScreen, isAuthenticated) { actualizarContador() }
+
+    val menuItems = remember(currentUser) {
+        val items = mutableListOf("Inicio", "Formulario", "Mis Altas", "Altas Globales", "Corregir refacciones")
+        // 🔥 AHORA TAMBIÉN ROL 2 (PLANTA) VE ESTO
+        if (currentUser.rol == 1 || currentUser.rol == 0 || currentUser.rol == 2) {
+            items.add("Aprobaciones pendientes")
+        }
+        items.add("Cerrar Sesión")
+        items
+    }
+
+    if (!isAuthenticated) {
+        LoginScreen(onLoginSuccess = { usuario ->
+            currentUser = usuario
+            isAuthenticated = true
+            currentScreen = "Inicio"
+        })
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Text("Menú Principal", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+                    val nombreRol = when(currentUser.rol) {
+                        0 -> "Admin"; 1 -> "Gte. Mantenimiento"; 2 -> "Gte. Planta"; 3 -> "Almacenista"; 4 -> "Comprador"; else -> "Usuario"
+                    }
+                    Text(text = "Usuario: ${currentUser.username}\nRol: $nombreRol", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    menuItems.forEach { item ->
+                        NavigationDrawerItem(
+                            label = { Text(item) },
+                            selected = item == currentScreen,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                if (item == "Cerrar Sesión") {
+                                    isAuthenticated = false; currentUser = defaultUser; currentScreen = "Inicio"
+                                } else {
+                                    currentScreen = item
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        ) {
+            Scaffold(
+                topBar = {
+                    CenterAlignedTopAppBar(
+                        title = { Text(currentScreen, color = MaterialTheme.colorScheme.onBackground) },
+                        navigationIcon = {
+                            if (currentScreen == "Notificaciones") {
+                                IconButton(onClick = { currentScreen = "Inicio" }) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = MaterialTheme.colorScheme.onBackground)
+                                }
+                            } else {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Default.Menu, contentDescription = "Menú", tint = MaterialTheme.colorScheme.onBackground)
+                                }
+                            }
+                        }
+                    )
+                }
+            ) { innerPadding ->
+                Box(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp), contentAlignment = Alignment.TopCenter) {
+                    when (currentScreen) {
+                        "Inicio" -> PantallaSimple(
+                            nombreUsuario = currentUser.nombre,
+                            cantidadNotificaciones = notificacionesCount,
+                            onNotificationClick = { currentScreen = "Notificaciones" }
+                        )
+                        "Formulario" -> FormularioScreen(usuarioId = currentUser.id)
+                        "Mis Altas" -> MisAltasScreen(usuarioId = currentUser.id)
+                        "Altas Globales" -> AltasGlobalesScreen()
+                        "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
+                        "Aprobaciones pendientes" -> AprobacionesPendientesScreen(userRole = currentUser.rol) // Pasamos rol
+                        "Notificaciones" -> NotificacionesScreen(
+                            usuarioId = currentUser.id,
+                            userRole = currentUser.rol,
+                            onNavigate = { nuevaPantalla -> currentScreen = nuevaPantalla }
+                        )
+                        else -> Text("Pantalla no encontrada", color = Color.Red)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+
+PantallaSimple.kt:
+
+
+package com.example.actividad7.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+@Composable
+fun PantallaSimple(
+    nombreUsuario: String,
+    cantidadNotificaciones: Int, // 🔥 ESTE PARÁMETRO FALTABA
+    onNotificationClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Fila para el título "Hola" y el icono con badge
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "¡Hola $nombreUsuario!",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // 🔥 CONTENEDOR DEL ICONO + BADGE ROJO
+            Box(
+                modifier = Modifier
+                    .size(40.dp) // Tamaño del área clicable
+                    .clickable { onNotificationClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                // 1. El icono de la campana
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = "Notificaciones",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+
+                // 2. El globito rojo (Badge)
+                // Solo se muestra si hay notificaciones (> 0)
+                if (cantidadNotificaciones > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd) // Esquina superior derecha
+                            .size(18.dp) // Tamaño del círculo rojo
+                            .clip(CircleShape)
+                            .background(Color.Red),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = cantidadNotificaciones.toString(),
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Bienvenido al app de refacciones",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+
+
+
+Color.kt:
+
+package com.example.actividad7.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Definición de colores solicitados (Fondo Morado, Letras Blancas)
+val MoradoFondo = Color(0xFF6A1B9A) // Morado intenso
+val MoradoOscuro = Color(0xFF38006B)
+val MoradoClaro = Color(0xFF9C47D3)
+val BlancoTexto = Color(0xFFFFFFFF)
+val BlancoTransparente = Color(0xB3FFFFFF) // Para textos secundarios
+val ErrorRojo = Color(0xFFCF6679)
+
+
+TablaComponents.kt:
+
+
+package com.example.actividad7.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+@Composable
+fun PantallaSimple(
+    nombreUsuario: String,
+    cantidadNotificaciones: Int, // 🔥 ESTE PARÁMETRO FALTABA
+    onNotificationClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Fila para el título "Hola" y el icono con badge
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "¡Hola $nombreUsuario!",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // 🔥 CONTENEDOR DEL ICONO + BADGE ROJO
+            Box(
+                modifier = Modifier
+                    .size(40.dp) // Tamaño del área clicable
+                    .clickable { onNotificationClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                // 1. El icono de la campana
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = "Notificaciones",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+
+                // 2. El globito rojo (Badge)
+                // Solo se muestra si hay notificaciones (> 0)
+                if (cantidadNotificaciones > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd) // Esquina superior derecha
+                            .size(18.dp) // Tamaño del círculo rojo
+                            .clip(CircleShape)
+                            .background(Color.Red),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = cantidadNotificaciones.toString(),
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Bienvenido al app de refacciones",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+
+
+
+Theme.kt:
+
+
+package com.example.actividad7.ui.theme
+
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+
+// Forzamos el esquema de colores para que SIEMPRE sea fondo morado y texto blanco
+// independientemente del modo claro/oscuro del sistema.
+
+private val AppColors = darkColorScheme(
+    primary = BlancoTexto,
+    onPrimary = MoradoFondo,
+    primaryContainer = MoradoClaro,
+    onPrimaryContainer = BlancoTexto,
+    secondary = MoradoClaro,
+    onSecondary = BlancoTexto,
+    background = MoradoFondo,
+    onBackground = BlancoTexto,
+    surface = MoradoFondo, // Las tarjetas también serán moradas o ligeramente distintas si prefieres
+    onSurface = BlancoTexto,
+    error = ErrorRojo,
+    onError = Color.Black
+)
+
+@Composable
+fun Actividad7Theme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    // Usamos siempre AppColors para garantizar el diseño morado/blanco
+    MaterialTheme(
+        colorScheme = AppColors,
+        typography = Typography, // Asegúrate de que tu Type.kt use colores por defecto o tintados
+        content = content
+    )
+}
+
+
+
+Type.kt:
+
+
+package com.example.actividad7.ui.theme
+
+// 💡 CORRECCIÓN 2: Asegurar la importación correcta de Typography de Material3
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+
+// Configuración de la tipografía para Material 3
+val Typography = Typography(
+    titleLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp
+    ),
+    bodyLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.5.sp
+    ),
+    labelLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp
+    )
+    /* Agrega otras definiciones de tipografía si es necesario (headlineLarge, bodyMedium, etc.) */
+)
+
+
+
 AltasGlobalesScreen.kt:
 
 package com.example.actividad7.screens
@@ -150,10 +1062,8 @@ import com.example.actividad7.ui.TablaCell
 
 @Composable
 fun AltasGlobalesScreen() {
-
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
-
     val registros = remember { mutableStateListOf<Map<String, Any?>>() }
 
     LaunchedEffect(Unit) {
@@ -162,78 +1072,39 @@ fun AltasGlobalesScreen() {
         registros.addAll(datos)
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(12.dp)
-    ) {
-
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("Altas Globales (Tabla Completa)", color = Color.White, fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
 
         if (registros.isEmpty()) {
-
             Text("No hay registros.", color = Color.White)
-
         } else {
-
-            Row(
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth()
-            ) {
-
+            Row(Modifier.horizontalScroll(rememberScrollState()).fillMaxWidth()) {
                 Column {
-
-                    // ------------------ ENCABEZADOS -------------------
                     Row(Modifier.background(Color(0xFF003366))) {
-                        TablaHeader("ID", 80)
+                        TablaHeader("ID", 60)
+                        TablaHeader("Aprob. MTTO", 100)
+                        TablaHeader("Aprob. PLANTA", 100) // 🔥 Nueva columna
                         TablaHeader("Descripción", 200)
-                        TablaHeader("Costo", 120)
-                        TablaHeader("Área", 140)
-                        TablaHeader("Consumo", 140)
-                        TablaHeader("Frecuencia", 140)
-                        TablaHeader("Unidad", 120)
-                        TablaHeader("Cantidad", 120)
-                        TablaHeader("Observación", 200)
-                        TablaHeader("No. Parte", 150)
-                        TablaHeader("Marca", 140)
-                        TablaHeader("Equipos Usar", 180)
-                        TablaHeader("Familia", 140)
-                        TablaHeader("Reemplazable", 140)
-                        TablaHeader("Reduce Velocidad", 180)
-                        TablaHeader("Existe Riesgo", 150)
-                        TablaHeader("Nacionalidad", 150)
-                        TablaHeader("Página Web", 200)
+                        TablaHeader("Costo", 100)
+                        TablaHeader("Área", 120)
+                        TablaHeader("No. Parte", 120)
+                        TablaHeader("Familia", 120)
+                        TablaHeader("Cantidad", 80)
                     }
-
-                    // ------------------ FILAS -------------------
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-
                         registros.forEach { ref ->
-
                             Row(Modifier.background(Color(0x22003366))) {
-
-                                TablaCell(ref["id"]?.toString(), 80)
+                                TablaCell(ref["id"]?.toString(), 60)
+                                TablaCell(ref["aprobacion_mtto"]?.toString(), 100)
+                                TablaCell(ref["aprobacion_planta"]?.toString(), 100) // 🔥
                                 TablaCell(ref["descripcion"]?.toString(), 200)
-                                TablaCell(ref["costo"]?.toString(), 120)
-                                TablaCell(ref["area"]?.toString(), 140)
-                                TablaCell(ref["consumo"]?.toString(), 140)
-                                TablaCell(ref["frecuencia"]?.toString(), 140)
-                                TablaCell(ref["unidad"]?.toString(), 120)
-                                TablaCell(ref["cantidad"]?.toString(), 120)
-                                TablaCell(ref["observacion"]?.toString(), 200)
-                                TablaCell(ref["numero_parte_proveedor"]?.toString(), 150)
-                                TablaCell(ref["marca_proveedor"]?.toString(), 140)
-                                TablaCell(ref["equipos_a_usar"]?.toString(), 180)
-                                TablaCell(ref["familia"]?.toString(), 140)
-                                TablaCell(ref["reemplazable"]?.toString(), 140)
-                                TablaCell(ref["reduce_velocidad"]?.toString(), 180)
-                                TablaCell(ref["existe_riesgo"]?.toString(), 150)
-                                TablaCell(ref["nacionalidad"]?.toString(), 150)
-                                TablaCell(ref["pagina_web"]?.toString(), 200)
+                                TablaCell(ref["costo"]?.toString(), 100)
+                                TablaCell(ref["area"]?.toString(), 120)
+                                TablaCell(ref["numero_parte_proveedor"]?.toString(), 120)
+                                TablaCell(ref["familia"]?.toString(), 120)
+                                TablaCell(ref["cantidad"]?.toString(), 80)
                             }
-
                             Divider(color = Color.White.copy(alpha = 0.3f))
                         }
                     }
@@ -244,7 +1115,146 @@ fun AltasGlobalesScreen() {
 }
 
 
+
+AprobacionesPendientesScreen.kt:
+package com.example.actividad7.screens
+
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.example.actividad7.DatabaseManager
+
+@Composable
+fun AprobacionesPendientesScreen(userRole: Int) { // 🔥 Recibe el ROL
+    val context = LocalContext.current
+    val dbManager = remember { DatabaseManager(context) }
+
+    val pendientes = remember { mutableStateListOf<Map<String, Any?>>() }
+    var seleccionado by remember { mutableStateOf<Map<String, Any?>?>(null) }
+
+    fun cargarDatos() {
+        pendientes.clear()
+        // 🔥 Pasamos el rol para filtrar qué pendientes ve
+        pendientes.addAll(dbManager.obtenerPendientesAprobacion(userRole))
+    }
+
+    LaunchedEffect(Unit) {
+        cargarDatos()
+    }
+
+    val ColorAprobar = Color(0xFF4CAF50)
+    val ColorRechazar = Color(0xFFF44336)
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+        if (seleccionado == null) {
+            // LISTA
+            val titulo = if (userRole == 2) "Aprobaciones Planta" else "Aprobaciones Mtto"
+            Text(titulo, style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Spacer(Modifier.height(16.dp))
+
+            if (pendientes.isEmpty()) {
+                Text("No hay solicitudes pendientes.", color = Color.White)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(pendientes) { item ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { seleccionado = item },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text("No. Parte: ${item["numero_parte_proveedor"]}", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Descripción: ${item["descripcion"]}", color = Color.White)
+
+                                // Mostrar estado actual si es Planta
+                                if (userRole == 2) {
+                                    Text("Mtto: ${item["aprobacion_mtto"]}", color = Color.Green, fontSize = MaterialTheme.typography.bodySmall.fontSize)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // DETALLE
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Text("Detalle de Aprobación", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Spacer(Modifier.height(16.dp))
+
+                DetalleTexto("ID:", seleccionado!!["id"].toString())
+                DetalleTexto("No. Parte:", seleccionado!!["numero_parte_proveedor"].toString())
+                DetalleTexto("Descripción:", seleccionado!!["descripcion"].toString())
+                DetalleTexto("Costo:", "$ ${seleccionado!!["costo"]}")
+                DetalleTexto("Área:", seleccionado!!["area"].toString())
+                DetalleTexto("Familia:", seleccionado!!["familia"].toString())
+
+                Spacer(Modifier.height(24.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+
+                    Button(
+                        onClick = {
+                            val id = seleccionado!!["id"].toString().toInt()
+                            // 🔥 Pasamos el ROL para saber qué columna actualizar
+                            if (dbManager.actualizarEstadoAprobacion(id, "NO", userRole)) {
+                                Toast.makeText(context, "Registro RECHAZADO", Toast.LENGTH_SHORT).show()
+                                cargarDatos()
+                                seleccionado = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ColorRechazar)
+                    ) { Text("RECHAZAR") }
+
+                    Button(
+                        onClick = {
+                            val id = seleccionado!!["id"].toString().toInt()
+                            // 🔥 Pasamos el ROL para saber qué columna actualizar
+                            if (dbManager.actualizarEstadoAprobacion(id, "SI", userRole)) {
+                                Toast.makeText(context, "Registro APROBADO", Toast.LENGTH_SHORT).show()
+                                cargarDatos()
+                                seleccionado = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ColorAprobar)
+                    ) { Text("APROBAR") }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                TextButton(onClick = { seleccionado = null }, modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally)) {
+                    Text("Volver a la lista", color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetalleTexto(label: String, value: String) {
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Text(label, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
+        Text(if (value == "null") "-" else value, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        Divider(color = Color.White.copy(alpha = 0.2f))
+    }
+}
+
+
+
 CorregirRefacciones.kt:
+
 
 package com.example.actividad7.screens
 
@@ -464,21 +1474,16 @@ fun EditarRefaccionForm(ref: Map<String, Any?>, onVolver: () -> Unit) {
 
 FormularioScreen.kt:
 
+
 package com.example.actividad7.screens
 
-import android.graphics.BitmapFactory
-import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.actividad7.DatabaseManager
@@ -488,7 +1493,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
-    // Campos del formulario (Declaración de estado)
+    // Campos del formulario
     var descripcion by remember { mutableStateOf("") }
     var costo by remember { mutableStateOf("") }
     var area by remember { mutableStateOf("") }
@@ -497,7 +1502,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     var unidad by remember { mutableStateOf("") }
     var cantidad by remember { mutableStateOf("") }
     var observacion by remember { mutableStateOf("") }
-    var numeroParte by remember { mutableStateOf("") } // numero_parte_proveedor
+    var numeroParte by remember { mutableStateOf("") }
     var marcaProveedor by remember { mutableStateOf("") }
     var equiposAUsar by remember { mutableStateOf("") }
     var familia by remember { mutableStateOf("") }
@@ -507,19 +1512,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     var nacionalidad by remember { mutableStateOf("") }
     var paginaWeb by remember { mutableStateOf("") }
 
-    var imagenSeleccionada by remember { mutableStateOf<ByteArray?>(null) }
-
-    // El launcher para seleccionar imagen se mantiene, aunque se omite la parte visual en el formulario
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let {
-            val inputStream = context.contentResolver.openInputStream(it)
-            imagenSeleccionada = inputStream?.readBytes()
-        }
-    }
-
-    // Configuración de colores para los campos de texto (Blanco sobre Morado)
+    // Configuración de colores
     val textColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
@@ -530,7 +1523,6 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
         cursorColor = Color.White
     )
 
-    // Definición del color Azul Marino
     val AzulMarino = Color(0xFF003366)
 
     LazyColumn(
@@ -539,15 +1531,13 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     ) {
         item { Text("Registrar Refacción", style = MaterialTheme.typography.titleLarge, color = Color.White) }
 
-        // CAMPOS OBLIGATORIOS Y BÁSICOS (Agrupados arriba)
+        // Campos
         item { OutlinedTextField(value = numeroParte, onValueChange = { numeroParte = it }, label = { Text("Número parte (Obligatorio)") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = descripcion, onValueChange = { descripcion = it }, label = { Text("Descripción") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = costo, onValueChange = { costo = it }, label = { Text("Costo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = cantidad, onValueChange = { cantidad = it }, label = { Text("Cantidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Área") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = familia, onValueChange = { familia = it }, label = { Text("Familia") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
-
-        // CAMPOS ADICIONALES (El resto de la tabla)
         item { OutlinedTextField(value = consumo, onValueChange = { consumo = it }, label = { Text("Consumo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = frecuencia, onValueChange = { frecuencia = it }, label = { Text("Frecuencia") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = unidad, onValueChange = { unidad = it }, label = { Text("Unidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
@@ -560,8 +1550,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
         item { OutlinedTextField(value = nacionalidad, onValueChange = { nacionalidad = it }, label = { Text("Nacionalidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = paginaWeb, onValueChange = { paginaWeb = it }, label = { Text("Página Web") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
 
-
-        // BOTÓN DE ENVÍO
+        // Botón Enviar
         item {
             Button(
                 onClick = {
@@ -588,7 +1577,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
                         "existe_riesgo" to existeRiesgo,
                         "nacionalidad" to nacionalidad,
                         "pagina_web" to paginaWeb,
-                        "foto" to imagenSeleccionada,
+                        // "foto" to imagenSeleccionada, // 🔥 ELIMINADO
                         "usuario_id" to usuarioId
                     )
 
@@ -596,15 +1585,14 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
 
                     if (result != -1L) {
                         Toast.makeText(context, "Guardado con éxito", Toast.LENGTH_SHORT).show()
-                        // Limpiar campos críticos
-                        descripcion = ""; numeroParte = ""; cantidad = ""; imagenSeleccionada = null
+                        // Limpiar campos
+                        descripcion = ""; numeroParte = ""; cantidad = "";
                         costo = ""; area = ""; consumo = ""; frecuencia = ""; unidad = ""; observacion = ""; marcaProveedor = ""; equiposAUsar = ""; familia = ""; reemplazable = ""; reduceVelocidad = ""; existeRiesgo = ""; nacionalidad = ""; paginaWeb = ""
                     } else {
-                        Toast.makeText(context, "Error al guardar (revise log)", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Error al guardar. Verifique si el No. Parte ya existe.", Toast.LENGTH_LONG).show()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                // 🔥 CAMBIO DE COLOR DEL BOTÓN: Fondo Azul Marino, Letra Blanca, y texto "Enviar"
                 colors = ButtonDefaults.buttonColors(containerColor = AzulMarino, contentColor = Color.White)
             ) {
                 Text("ENVIAR")
@@ -629,6 +1617,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation // 🔥 IMPORTACIÓN NECESARIA
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.example.actividad7.DatabaseManager
@@ -639,7 +1628,6 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
-    // 🔥 AHORA ES USERNAME, YA NO CORREO
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
@@ -679,7 +1667,6 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
                     color = Color.White
                 )
 
-                // 🔥 CAMBIADO A USERNAME
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it; isError = false },
@@ -690,11 +1677,14 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // CAMPO DE CONTRASEÑA
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it; isError = false },
                     label = { Text("Contraseña") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White.copy(alpha = 0.7f)) },
+                    // 🔥 ESTA LÍNEA OCULTA LA CONTRASEÑA
+                    visualTransformation = PasswordVisualTransformation(),
                     isError = isError,
                     colors = colors,
                     modifier = Modifier.fillMaxWidth()
@@ -710,7 +1700,6 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
 
                 Button(
                     onClick = {
-                        // 🔥 AHORA SE VALIDA POR USERNAME
                         val usuario = dbManager.validarUsuarioPorUsername(username, password)
 
                         if (usuario != null) {
@@ -735,9 +1724,7 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
 
 
 
-
 MisAltasScreen.kt:
-
 
 package com.example.actividad7.screens
 
@@ -759,10 +1746,8 @@ import com.example.actividad7.ui.TablaCell
 
 @Composable
 fun MisAltasScreen(usuarioId: Int) {
-
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
-
     val registros = remember { mutableStateListOf<Map<String, Any?>>() }
 
     LaunchedEffect(Unit) {
@@ -771,78 +1756,35 @@ fun MisAltasScreen(usuarioId: Int) {
         registros.addAll(datos)
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(12.dp)
-    ) {
-
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("Mis Altas (Tabla Completa)", color = Color.White, fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
 
         if (registros.isEmpty()) {
-
             Text("No hay registros.", color = Color.White)
-
         } else {
-
-            Row(
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth()
-            ) {
-
+            Row(Modifier.horizontalScroll(rememberScrollState()).fillMaxWidth()) {
                 Column {
-
-                    // ---------------- ENCABEZADOS ----------------
                     Row(Modifier.background(Color(0xFF003366))) {
                         TablaHeader("ID", 80)
+                        TablaHeader("Aprob. MTTO", 120)
+                        TablaHeader("Aprob. PLANTA", 120) // 🔥
                         TablaHeader("Descripción", 200)
                         TablaHeader("Costo", 120)
                         TablaHeader("Área", 140)
-                        TablaHeader("Consumo", 140)
-                        TablaHeader("Frecuencia", 140)
-                        TablaHeader("Unidad", 120)
-                        TablaHeader("Cantidad", 120)
-                        TablaHeader("Observación", 200)
                         TablaHeader("No. Parte", 150)
-                        TablaHeader("Marca", 140)
-                        TablaHeader("Equipos Usar", 180)
-                        TablaHeader("Familia", 140)
-                        TablaHeader("Reemplazable", 140)
-                        TablaHeader("Reduce Velocidad", 180)
-                        TablaHeader("Existe Riesgo", 150)
-                        TablaHeader("Nacionalidad", 150)
-                        TablaHeader("Página Web", 200)
                     }
-
-                    // ---------------- FILAS ----------------
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-
                         registros.forEach { ref ->
-
                             Row(Modifier.background(Color(0x22003366))) {
-
                                 TablaCell(ref["id"]?.toString(), 80)
+                                TablaCell(ref["aprobacion_mtto"]?.toString(), 120)
+                                TablaCell(ref["aprobacion_planta"]?.toString(), 120) // 🔥
                                 TablaCell(ref["descripcion"]?.toString(), 200)
                                 TablaCell(ref["costo"]?.toString(), 120)
                                 TablaCell(ref["area"]?.toString(), 140)
-                                TablaCell(ref["consumo"]?.toString(), 140)
-                                TablaCell(ref["frecuencia"]?.toString(), 140)
-                                TablaCell(ref["unidad"]?.toString(), 120)
-                                TablaCell(ref["cantidad"]?.toString(), 120)
-                                TablaCell(ref["observacion"]?.toString(), 200)
                                 TablaCell(ref["numero_parte_proveedor"]?.toString(), 150)
-                                TablaCell(ref["marca_proveedor"]?.toString(), 140)
-                                TablaCell(ref["equipos_a_usar"]?.toString(), 180)
-                                TablaCell(ref["familia"]?.toString(), 140)
-                                TablaCell(ref["reemplazable"]?.toString(), 140)
-                                TablaCell(ref["reduce_velocidad"]?.toString(), 180)
-                                TablaCell(ref["existe_riesgo"]?.toString(), 150)
-                                TablaCell(ref["nacionalidad"]?.toString(), 150)
-                                TablaCell(ref["pagina_web"]?.toString(), 200)
                             }
-
                             Divider(color = Color.White.copy(alpha = 0.3f))
                         }
                     }
@@ -853,668 +1795,128 @@ fun MisAltasScreen(usuarioId: Int) {
 }
 
 
-Color.kt:
 
+NotificacionesScreen.kt:
 
-package com.example.actividad7.ui.theme
 
-import androidx.compose.ui.graphics.Color
-
-// Definición de colores solicitados (Fondo Morado, Letras Blancas)
-val MoradoFondo = Color(0xFF6A1B9A) // Morado intenso
-val MoradoOscuro = Color(0xFF38006B)
-val MoradoClaro = Color(0xFF9C47D3)
-val BlancoTexto = Color(0xFFFFFFFF)
-val BlancoTransparente = Color(0xB3FFFFFF) // Para textos secundarios
-val ErrorRojo = Color(0xFFCF6679)
-
-
-TablaComponents.kt:
-
-package com.example.actividad7.ui
-
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-
-@Composable
-fun TablaHeader(texto: String, ancho: Int) {
-    Text(
-        text = texto,
-        color = Color.White,
-        fontWeight = FontWeight.Bold,
-        fontSize = 12.sp,
-        modifier = Modifier
-            .width(ancho.dp)
-            .padding(6.dp)
-    )
-}
-
-@Composable
-fun TablaCell(texto: String?, ancho: Int) {
-    Text(
-        text = texto ?: "",
-        color = Color.White,
-        fontSize = 12.sp,
-        modifier = Modifier
-            .width(ancho.dp)
-            .padding(6.dp)
-    )
-}
-
-
-
-Theme.kt:
-
-
-package com.example.actividad7.ui.theme
-
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-
-// Forzamos el esquema de colores para que SIEMPRE sea fondo morado y texto blanco
-// independientemente del modo claro/oscuro del sistema.
-
-private val AppColors = darkColorScheme(
-    primary = BlancoTexto,
-    onPrimary = MoradoFondo,
-    primaryContainer = MoradoClaro,
-    onPrimaryContainer = BlancoTexto,
-    secondary = MoradoClaro,
-    onSecondary = BlancoTexto,
-    background = MoradoFondo,
-    onBackground = BlancoTexto,
-    surface = MoradoFondo, // Las tarjetas también serán moradas o ligeramente distintas si prefieres
-    onSurface = BlancoTexto,
-    error = ErrorRojo,
-    onError = Color.Black
-)
-
-@Composable
-fun Actividad7Theme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit
-) {
-    // Usamos siempre AppColors para garantizar el diseño morado/blanco
-    MaterialTheme(
-        colorScheme = AppColors,
-        typography = Typography, // Asegúrate de que tu Type.kt use colores por defecto o tintados
-        content = content
-    )
-}
-
-
-Type.kt:
-
-
-package com.example.actividad7.ui.theme
-
-// 💡 CORRECCIÓN 2: Asegurar la importación correcta de Typography de Material3
-import androidx.compose.material3.Typography
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-
-// Configuración de la tipografía para Material 3
-val Typography = Typography(
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp
-    ),
-    labelLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp
-    )
-    /* Agrega otras definiciones de tipografía si es necesario (headlineLarge, bodyMedium, etc.) */
-)
-
-
-DataBaseManager.kt:
-
-
-package com.example.actividad7
-
-import android.content.ContentValues
-import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
-import android.util.Log
-
-data class Usuario(
-    val id: Int,
-    val nombre: String,
-    val username: String
-)
-
-class DatabaseManager(context: Context) :
-    SQLiteOpenHelper(context, "proyectoAndroid.db", null, 3) {
-
-    override fun onCreate(db: SQLiteDatabase) { /* NO SE CREA, VIENE DE ASSETS */ }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) { /* NO USAR */ }
-
-    // ============================================================
-    // VALIDAR LOGIN
-    // ============================================================
-    fun validarUsuarioPorUsername(username: String, password: String): Usuario? {
-        val db = readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT UsuarioID, Nombre, Username FROM usuarios WHERE Username = ? AND Contrasena = ?",
-            arrayOf(username, password)
-        )
-
-        return if (cursor.moveToFirst()) {
-            val user = Usuario(
-                id = cursor.getInt(0),
-                nombre = cursor.getString(1),
-                username = cursor.getString(2)
-            )
-            cursor.close()
-            user
-        } else {
-            cursor.close()
-            null
-        }
-    }
-
-    // ============================================================
-    // INSERTAR REFACCIÓN
-    // ============================================================
-    fun insertarRefaccion(datos: Map<String, Any?>): Long {
-        val db = writableDatabase
-        val values = ContentValues()
-
-        datos.forEach { (key, value) ->
-            when (value) {
-                is String -> values.put(key, value)
-                is Int -> values.put(key, value)
-                is Double -> values.put(key, value)
-                is ByteArray -> values.put(key, value)
-                null -> values.putNull(key)
-                else -> Log.e("DBManager", "Tipo de dato no soportado: $key")
-            }
-        }
-
-        return try {
-            db.insertOrThrow("refacciones", null, values)
-        } catch (e: Exception) {
-            Log.e("DBManager", "Error insertando refacción: ${e.message}")
-            -1L
-        }
-    }
-
-    // ============================================================
-    // ACTUALIZAR REFACCIÓN
-    // ============================================================
-    fun actualizarRefaccion(id: String, datos: Map<String, Any?>): Boolean {
-        val db = writableDatabase
-        val values = ContentValues()
-
-        datos.forEach { (key, value) ->
-            when (value) {
-                is String -> values.put(key, value)
-                is Int -> values.put(key, value)
-                is Double -> values.put(key, value)
-                is ByteArray -> values.put(key, value)
-                null -> values.putNull(key)
-                else -> Log.e("DBManager", "Tipo no soportado: $key")
-            }
-        }
-
-        val filas = db.update("refacciones", values, "id = ?", arrayOf(id))
-        return filas > 0
-    }
-
-    // ============================================================
-    // OBTENER TODAS LAS REFACCIONES (ALTAS GLOBALES)
-    // ============================================================
-    fun obtenerRefacciones(): List<Map<String, Any?>> {
-        val db = readableDatabase
-        val lista = mutableListOf<Map<String, Any?>>()
-
-        val cursor = db.rawQuery(
-            """
-            SELECT id, descripcion, costo, area, consumo, numero_parte_proveedor, familia
-            FROM refacciones
-            """.trimIndent(),
-            null
-        )
-
-        if (cursor.moveToFirst()) {
-            do {
-                val reg = mapOf(
-                    "id" to cursor.getInt(cursor.getColumnIndexOrThrow("id")),
-                    "descripcion" to cursor.getString(cursor.getColumnIndexOrThrow("descripcion")),
-                    "costo" to cursor.getDouble(cursor.getColumnIndexOrThrow("costo")),
-                    "area" to cursor.getString(cursor.getColumnIndexOrThrow("area")),
-                    "consumo" to cursor.getString(cursor.getColumnIndexOrThrow("consumo")),
-                    "numero_parte_proveedor" to cursor.getString(cursor.getColumnIndexOrThrow("numero_parte_proveedor")),
-                    "familia" to cursor.getString(cursor.getColumnIndexOrThrow("familia"))
-                )
-                lista.add(reg)
-            } while (cursor.moveToNext())
-        }
-
-        cursor.close()
-        return lista
-    }
-
-    // ============================================================
-    // OBTENER REFACCIONES DE UN USUARIO
-    // ============================================================
-    fun obtenerRefaccionesPorUsuario(usuarioId: Int): List<Map<String, Any?>> {
-        val db = readableDatabase
-        val lista = mutableListOf<Map<String, Any?>>()
-
-        val cursor = db.rawQuery(
-            """
-            SELECT id, descripcion, costo, area, consumo, numero_parte_proveedor, familia
-            FROM refacciones
-            WHERE usuario_id = ?
-            """.trimIndent(),
-            arrayOf(usuarioId.toString())
-        )
-
-        if (cursor.moveToFirst()) {
-            do {
-                val reg = mapOf(
-                    "id" to cursor.getInt(cursor.getColumnIndexOrThrow("id")),
-                    "descripcion" to cursor.getString(cursor.getColumnIndexOrThrow("descripcion")),
-                    "costo" to cursor.getDouble(cursor.getColumnIndexOrThrow("costo")),
-                    "area" to cursor.getString(cursor.getColumnIndexOrThrow("area")),
-                    "consumo" to cursor.getString(cursor.getColumnIndexOrThrow("consumo")),
-                    "numero_parte_proveedor" to cursor.getString(cursor.getColumnIndexOrThrow("numero_parte_proveedor")),
-                    "familia" to cursor.getString(cursor.getColumnIndexOrThrow("familia"))
-                )
-                lista.add(reg)
-            } while (cursor.moveToNext())
-        }
-
-        cursor.close()
-        return lista
-    }
-}
-
-
-
-DataBaseUtils.kt:
-
-
-package com.example.actividad7
-
-import android.content.Context
-import java.io.FileOutputStream
-
-object DataBaseUtils {
-    fun copiarBaseDatosSiNoExiste(context: Context) {
-        val dbFile = context.getDatabasePath("proyectoAndroid.db")
-
-        if (!dbFile.exists()) {
-            dbFile.parentFile?.mkdirs()
-            try {
-                // Asegúrate de que "proyectoAndroid.db" esté en la carpeta src/main/assets/
-                context.assets.open("proyectoAndroid.db").use { input ->
-                    FileOutputStream(dbFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-}
-
-
-DBHelper.kt:
-
-
-package com.example.actividad7
-
-import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
-
-class DBHelper(context: Context) : SQLiteOpenHelper(
-    context,
-    "proyectoAndroid.db",
-    null,
-    3 // Subimos versión para forzar la actualización
-) {
-    override fun onCreate(db: SQLiteDatabase) {
-        // Tabla Usuarios
-        db.execSQL("""
-            CREATE TABLE usuarios (
-                UsuarioID INTEGER PRIMARY KEY AUTOINCREMENT,
-                Username TEXT NOT NULL UNIQUE,
-                Correo TEXT NOT NULL UNIQUE,
-                Contrasena TEXT NOT NULL,
-                Nombre TEXT NOT NULL,
-                Apellidos TEXT NOT NULL,
-                Rol INTEGER NOT NULL,
-                DescripcionRol TEXT,
-                NumeroDeSitio INTEGER NOT NULL
-            );
-        """.trimIndent())
-
-        // 🔥 USUARIOS INICIALES Y SUS CONTRASEÑAS ACTUALIZADAS
-        // Insertamos todos los usuarios para que el login funcione
-        db.execSQL("""
-            INSERT INTO usuarios (UsuarioID, Username, Correo, Contrasena, Nombre, Apellidos, Rol, NumeroDeSitio)
-            VALUES 
-            (3, 'mauricio.estrada', 'mauricio.estrada@clarios.com', 'Pinos364123', 'Mauricio', 'Estrada De la Garza', 1, 13),
-            (6, 'biancanava', 'bianca.nava@clarios.com', '987654321', 'Bianca', 'Nava', 4, 13),
-            (7, 'benjamin.garcia', 'benjamin.garcia@clarios.com', 'ggez2003', 'Benjamin', 'Garcia', 3, 13),
-            (8, 'julian.basurto', 'julian.basurto@clarios.com', 'clarios.com!', 'Julian', 'Basurto', 6, 13),
-            (9, 'ricardo.medrano', 'ricardo.medrano@clarios.com', 'celayaPlanta', 'Ricardo', 'Medrano', 6, 13),
-            (10, 'jesus.torres', 'jesus.torres@clarios.com', 'torreonPlanta', 'Jesus', 'Torres', 6, 13);
-        """.trimIndent())
-
-        // Tabla Refacciones
-        db.execSQL("""
-            CREATE TABLE refacciones (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                descripcion TEXT,
-                costo REAL,
-                area TEXT,
-                consumo TEXT,
-                frecuencia TEXT,
-                unidad TEXT,
-                cantidad INTEGER,
-                observacion TEXT,
-                numero_parte_proveedor TEXT NOT NULL UNIQUE,
-                marca_proveedor TEXT,
-                equipos_a_usar TEXT,
-                familia TEXT,
-                reemplazable TEXT,
-                reduce_velocidad TEXT,
-                existe_riesgo TEXT,
-                nacionalidad TEXT,
-                pagina_web TEXT,
-                foto BLOB,
-                usuario_id INTEGER NOT NULL DEFAULT 1,
-                FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
-            );
-        """.trimIndent())
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Borra las tablas existentes y llama a onCreate para recrearlas con los datos actualizados.
-        db.execSQL("DROP TABLE IF EXISTS refacciones")
-        db.execSQL("DROP TABLE IF EXISTS usuarios")
-        onCreate(db)
-    }
-}
-
-
-MainActivity.kt:
-
-
-package com.example.actividad7
-
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import com.example.actividad7.ui.theme.Actividad7Theme
-
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Corrección: Aseguramos que el nombre coincida con tu archivo (DataBaseUtils o DatabaseUtils)
-        // Si tu archivo se llama DataBaseUtils.kt, usa DataBaseUtils.
-        // Si no tienes este archivo, avísame y te lo genero.
-        try {
-            DataBaseUtils.copiarBaseDatosSiNoExiste(this)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        setContent {
-            Actividad7Theme {
-                MainScreen()
-            }
-        }
-    }
-}
-
-
-MainScreen.kt:
-
-
-
-@file:OptIn(ExperimentalMaterial3Api::class)
-
-package com.example.actividad7
+package com.example.actividad7.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-
-import com.example.actividad7.screens.AltasGlobalesScreen
-import com.example.actividad7.screens.CorregirRefaccionesScreen
-import com.example.actividad7.screens.FormularioScreen
-import com.example.actividad7.screens.MisAltasScreen
-import com.example.actividad7.screens.LoginScreen
+import com.example.actividad7.DatabaseManager
 
 @Composable
-fun MainScreen() {
-
+fun NotificacionesScreen(
+    usuarioId: Int,
+    userRole: Int,
+    onNavigate: (String) -> Unit
+) {
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
-    var isAuthenticated by remember { mutableStateOf(false) }
+    val notificaciones = remember { mutableStateListOf<Map<String, Any>>() }
 
-    // Usuario por defecto (obligatorio username)
-    val defaultUser = Usuario(
-        id = 0,
-        nombre = "Invitado",
-        username = "invitado"
-    )
+    // Función para cargar/recargar
+    fun cargar() {
+        notificaciones.clear()
+        notificaciones.addAll(dbManager.obtenerNotificaciones(usuarioId))
+        // Al entrar, marcamos como leídas visualmente (quita el globito del menú principal)
+        dbManager.marcarNotificacionesComoLeidas(usuarioId)
+    }
 
-    var currentUser by remember { mutableStateOf(defaultUser) }
+    LaunchedEffect(Unit) { cargar() }
 
-    // Drawer
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-
-    val menuItems = listOf(
-        "Inicio",
-        "Formulario",
-        "Mis Altas",
-        "Altas Globales",
-        "Corregir refacciones",
-        "Cerrar Sesión"
-    )
-
-    var currentScreen by remember { mutableStateOf("Inicio") }
-
-    if (!isAuthenticated) {
-
-        LoginScreen(
-            onLoginSuccess = { usuario ->
-                currentUser = usuario
-                isAuthenticated = true
-            }
-        )
-
-    } else {
-
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
-                ModalDrawerSheet {
-                    Text(
-                        "Menú Principal",
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Divider()
-
-                    menuItems.forEach { item ->
-                        NavigationDrawerItem(
-                            label = { Text(item) },
-                            selected = item == currentScreen,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-
-                                if (item == "Cerrar Sesión") {
-                                    isAuthenticated = false
-                                    currentUser = defaultUser
-                                    currentScreen = "Inicio"
-                                } else {
-                                    currentScreen = item
-                                }
-                            }
-                        )
-                    }
-                }
-            }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 16.dp)
         ) {
+            Icon(Icons.Default.Notifications, null, tint = Color.White, modifier = Modifier.size(28.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Notificaciones", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+        }
 
-            Scaffold(
-                topBar = {
-                    CenterAlignedTopAppBar(
-                        title = {
-                            Text(
-                                text = currentScreen,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(
-                                onClick = { scope.launch { drawerState.open() } }
-                            ) {
-                                Icon(
-                                    Icons.Default.Menu,
-                                    contentDescription = "Abrir menú",
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
+        if (notificaciones.isEmpty()) {
+            Text("No tienes notificaciones nuevas.", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(top = 16.dp))
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(notificaciones) { notif ->
+                    val mensaje = notif["mensaje"] as String
+                    val notifId = notif["id"] as Int
+                    val esRechazo = mensaje.contains("RECHAZADA")
+
+                    NotificationCard(
+                        mensaje = mensaje,
+                        esRechazo = esRechazo,
+                        onClick = {
+                            if (userRole == 1 || userRole == 0) {
+                                // ES GERENTE/ADMIN:
+                                // Navega a la pantalla de aprobación.
+                                // La notificación NO se borra aquí, se borrará sola cuando el gerente apruebe/rechace.
+                                onNavigate("Aprobaciones pendientes")
+                            } else {
+                                // ES USUARIO NORMAL:
+                                // Borra la notificación al instante porque ya la vio.
+                                dbManager.eliminarNotificacion(notifId)
+                                // Navega a sus altas.
+                                onNavigate("Mis Altas")
+                                cargar() // Refrescar lista localmente
                             }
                         }
                     )
-                }
-            ) { innerPadding ->
-
-                Box(
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .fillMaxSize()
-                        .padding(16.dp)
-                        .clickable(enabled = drawerState.isOpen) {
-                            scope.launch { drawerState.close() }
-                        },
-                    contentAlignment = Alignment.TopCenter
-                ) {
-
-                    when (currentScreen) {
-                        "Inicio" -> HomeScreen(nombreUsuario = currentUser.nombre)
-                        "Formulario" -> FormularioScreen(usuarioId = currentUser.id)
-                        "Mis Altas" -> MisAltasScreen(usuarioId = currentUser.id)
-                        "Altas Globales" -> AltasGlobalesScreen()
-                        "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
-                        else ->
-                            Text("Pantalla no encontrada: $currentScreen", color = Color.Red)
-                    }
                 }
             }
         }
     }
 }
 
-// HomeScreen
 @Composable
-fun HomeScreen(nombreUsuario: String) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "Bienvenido, $nombreUsuario",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Usa el menú para navegar.", color = MaterialTheme.colorScheme.onBackground)
-    }
-}
-
-
-
-PantallaSimple.kt:
-
-
-package com.example.actividad7.screens
-
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-
-@Composable
-fun HomeScreen(nombreUsuario: String) {
-    Column(
+fun NotificationCard(mensaje: String, esRechazo: Boolean, onClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (esRechazo) Color(0xFFB00020).copy(alpha = 0.8f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .fillMaxWidth()
+            .clickable { onClick() }
     ) {
-        Text(
-            text = "¡Hola $nombreUsuario!",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(10.dp),
+                shape = MaterialTheme.shapes.small,
+                color = if (esRechazo) Color.White else MaterialTheme.colorScheme.primary
+            ) {}
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
-        Text(
-            text = "Bienvenido al app de refacciones",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-            textAlign = TextAlign.Center
-        )
+            Text(
+                text = mensaje,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (esRechazo) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

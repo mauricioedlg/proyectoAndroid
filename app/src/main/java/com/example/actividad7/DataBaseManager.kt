@@ -13,7 +13,7 @@ data class Usuario(
 )
 
 class DatabaseManager(context: Context) :
-    SQLiteOpenHelper(context, "proyectoAndroid.db", null, 11) {
+    SQLiteOpenHelper(context, "proyectoAndroid.db", null, 13) {
 
     override fun onCreate(db: SQLiteDatabase) { /* Se maneja en DBHelper */ }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) { /* Se maneja en DBHelper */ }
@@ -41,7 +41,7 @@ class DatabaseManager(context: Context) :
     }
 
     // ==========================================
-    // LÓGICA DE NOTIFICACIONES
+    // NOTIFICACIONES
     // ==========================================
 
     private fun crearNotificacion(db: SQLiteDatabase, usuarioDestinoId: Int, mensaje: String, refaccionId: Long) {
@@ -67,7 +67,6 @@ class DatabaseManager(context: Context) :
                 mapa["id"] = cursor.getInt(cursor.getColumnIndexOrThrow("id"))
                 mapa["mensaje"] = cursor.getString(cursor.getColumnIndexOrThrow("mensaje"))
                 mapa["leido"] = cursor.getInt(cursor.getColumnIndexOrThrow("leido"))
-                // Recuperamos el ID de refacción por si se necesita
                 val refIdIndex = cursor.getColumnIndex("refaccion_id")
                 if(refIdIndex != -1) mapa["refaccion_id"] = cursor.getInt(refIdIndex)
 
@@ -96,14 +95,13 @@ class DatabaseManager(context: Context) :
         db.update("notificaciones", values, "usuario_destinoa_id = ?", arrayOf(usuarioId.toString()))
     }
 
-    // 🔥 ELIMINAR UNA NOTIFICACIÓN ESPECÍFICA (Para el Usuario al hacer click)
     fun eliminarNotificacion(notificacionId: Int) {
         val db = writableDatabase
         db.delete("notificaciones", "id = ?", arrayOf(notificacionId.toString()))
     }
 
     // ==========================================
-    // REFACCIONES + AUTOMATIZACIÓN
+    // REFACCIONES + FLUJO
     // ==========================================
 
     fun insertarRefaccion(datos: Map<String, Any?>): Long {
@@ -122,7 +120,7 @@ class DatabaseManager(context: Context) :
         return try {
             val id = db.insertOrThrow("refacciones", null, values)
             if (id != -1L) {
-                // 🔥 Busca al Gerente (Rol 1) para notificarle
+                // Notificar SIEMPRE al Gerente Mantenimiento (Rol 1)
                 val cursorGerente = db.rawQuery("SELECT UsuarioID FROM usuarios WHERE Rol = 1 LIMIT 1", null)
                 if (cursorGerente.moveToFirst()) {
                     val gerenteId = cursorGerente.getInt(0)
@@ -137,11 +135,10 @@ class DatabaseManager(context: Context) :
         }
     }
 
-    // 🔥 ACTUALIZAR ESTADO (MAGIA DE BORRADO AUTOMÁTICO)
-    fun actualizarEstadoAprobacion(idRefaccion: Int, nuevoEstado: String): Boolean {
+    // 🔥 ACTUALIZAR ESTADO (FLUJO CORREGIDO PARA HISTORIAL)
+    fun actualizarEstadoAprobacion(idRefaccion: Int, nuevoEstado: String, rolUsuario: Int): Boolean {
         val db = writableDatabase
 
-        // 1. Obtener datos antes de actualizar para saber a quién notificar
         var usuarioDueñoId = -1
         var descripcionRefaccion = ""
         val cursor = db.rawQuery("SELECT usuario_id, descripcion FROM refacciones WHERE id = ?", arrayOf(idRefaccion.toString()))
@@ -151,31 +148,58 @@ class DatabaseManager(context: Context) :
         }
         cursor.close()
 
-        // 2. Actualizar estado
-        val values = ContentValues().apply { put("aprobacion_mtto", nuevoEstado) }
+        val values = ContentValues()
+
+        if (rolUsuario == 1 || rolUsuario == 0) { // Mantenimiento
+            values.put("aprobacion_mtto", nuevoEstado)
+            if (nuevoEstado == "NO") values.put("aprobacion_planta", "NO")
+        } else if (rolUsuario == 2) { // Planta
+            values.put("aprobacion_planta", nuevoEstado)
+        }
+
         val filas = db.update("refacciones", values, "id = ?", arrayOf(idRefaccion.toString()))
 
         if (filas > 0) {
-            // 🔥 MAGIA 1: BORRAR la notificación del Gerente asociada a esta refacción
-            // Esto cumple el requisito: "se quite esa notificación cuando haya rechazado o aprobado"
-            db.delete("notificaciones", "refaccion_id = ?", arrayOf(idRefaccion.toString()))
+            // Borrar notificación del gerente actual (porque ya la atendió)
+            db.delete("notificaciones", "refaccion_id = ? AND usuario_destinoa_id != ?",
+                arrayOf(idRefaccion.toString(), usuarioDueñoId.toString()))
+            // ^ Borramos la del gerente, pero NO la del dueño si existiera alguna
 
-            // 🔥 MAGIA 2: Crear notificación para el dueño
-            if (usuarioDueñoId != -1) {
-                val mensaje = if (nuevoEstado == "SI") {
-                    "Tu alta '$descripcionRefaccion' ha sido APROBADA por el gerente."
+            // LÓGICA DE NOTIFICACIÓN
+            if (rolUsuario == 1 || rolUsuario == 0) {
+                // --- ACCIÓN DE MANTENIMIENTO ---
+                if (nuevoEstado == "SI") {
+                    // 1. Notificar a PLANTA (Rol 2)
+                    val cursorPlanta = db.rawQuery("SELECT UsuarioID FROM usuarios WHERE Rol = 2 LIMIT 1", null)
+                    if (cursorPlanta.moveToFirst()) {
+                        val plantaId = cursorPlanta.getInt(0)
+                        crearNotificacion(db, plantaId, "Solicitud aprobada por Mtto. Pendiente tu aprobación: $descripcionRefaccion", idRefaccion.toLong())
+                    }
+                    cursorPlanta.close()
+
+                    // 2. 🔥 HISTORIAL: Notificar al USUARIO también
+                    if (usuarioDueñoId != -1) {
+                        crearNotificacion(db, usuarioDueñoId, "Tu alta '$descripcionRefaccion' fue aprobada por Mtto. Pasó a revisión de Planta.", idRefaccion.toLong())
+                    }
+
                 } else {
-                    "Tu alta '$descripcionRefaccion' ha sido RECHAZADA por el gerente."
+                    // Rechazó Mtto
+                    crearNotificacion(db, usuarioDueñoId, "Tu alta '$descripcionRefaccion' fue RECHAZADA por Mantenimiento.", idRefaccion.toLong())
                 }
-                // También le pasamos el refaccionId
-                crearNotificacion(db, usuarioDueñoId, mensaje, idRefaccion.toLong())
+            } else if (rolUsuario == 2) {
+                // --- ACCIÓN DE PLANTA ---
+                if (nuevoEstado == "SI") {
+                    crearNotificacion(db, usuarioDueñoId, "¡Felicidades! Tu alta '$descripcionRefaccion' fue APROBADA por Planta (Proceso Completo).", idRefaccion.toLong())
+                } else {
+                    crearNotificacion(db, usuarioDueñoId, "Tu alta '$descripcionRefaccion' fue RECHAZADA por Planta.", idRefaccion.toLong())
+                }
             }
         }
 
         return filas > 0
     }
 
-    // (Resto de métodos estándar)
+    // Métodos estándar
     fun actualizarRefaccion(id: String, datos: Map<String, Any?>): Boolean {
         val db = writableDatabase
         val values = ContentValues()
@@ -191,10 +215,16 @@ class DatabaseManager(context: Context) :
         return db.update("refacciones", values, "id = ?", arrayOf(id)) > 0
     }
 
-    fun obtenerPendientesAprobacion(): List<Map<String, Any?>> {
+    fun obtenerPendientesAprobacion(rolUsuario: Int): List<Map<String, Any?>> {
         val db = readableDatabase
         val lista = mutableListOf<Map<String, Any?>>()
-        val cursor = db.rawQuery("SELECT * FROM refacciones WHERE aprobacion_mtto = 'PENDIENTE'", null)
+        val query = when(rolUsuario) {
+            1 -> "SELECT * FROM refacciones WHERE aprobacion_mtto = 'PENDIENTE'"
+            2 -> "SELECT * FROM refacciones WHERE aprobacion_mtto = 'SI' AND aprobacion_planta = 'PENDIENTE'"
+            0 -> "SELECT * FROM refacciones WHERE aprobacion_mtto = 'PENDIENTE' OR (aprobacion_mtto = 'SI' AND aprobacion_planta = 'PENDIENTE')"
+            else -> "SELECT * FROM refacciones WHERE 1=0"
+        }
+        val cursor = db.rawQuery(query, null)
         if (cursor.moveToFirst()) {
             do { lista.add(cursorToMap(cursor)) } while (cursor.moveToNext())
         }
@@ -238,6 +268,7 @@ class DatabaseManager(context: Context) :
             }
         }
         if (mapa["aprobacion_mtto"] == null) mapa["aprobacion_mtto"] = "PENDIENTE"
+        if (mapa["aprobacion_planta"] == null) mapa["aprobacion_planta"] = "PENDIENTE"
         return mapa
     }
 }

@@ -8,7 +8,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     context,
     "proyectoAndroid.db",
     null,
-    11 // 🔥 Versión 11: Estructura con notificaciones vinculadas
+    13 // 🔥 Versión 13: Persistencia de datos arreglada
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         crearTablaUsuarios(db)
@@ -17,15 +17,13 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Recreamos tablas dinámicas
-        db.execSQL("DROP TABLE IF EXISTS refacciones")
-        db.execSQL("DROP TABLE IF EXISTS notificaciones")
+        // 🔥 CORRECCIÓN IMPORTANTE:
+        // Ya NO borramos las tablas (DROP). Así tus datos se guardan aunque actualices la app.
+        // Solo llamamos a crear por si falta alguna tabla nueva.
 
+        crearTablaUsuarios(db)
         crearTablaRefacciones(db)
         crearTablaNotificaciones(db)
-
-        // Usuarios se mantiene intacto para no borrar tus logins
-        crearTablaUsuarios(db)
     }
 
     private fun crearTablaUsuarios(db: SQLiteDatabase) {
@@ -67,13 +65,13 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 pagina_web TEXT,
                 usuario_id INTEGER NOT NULL DEFAULT 1,
                 aprobacion_mtto TEXT DEFAULT 'PENDIENTE',
+                aprobacion_planta TEXT DEFAULT 'PENDIENTE',
                 FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
             );
         """.trimIndent())
     }
 
     private fun crearTablaNotificaciones(db: SQLiteDatabase) {
-        // 🔥 Tabla con refaccion_id para el borrado automático
         db.execSQL("""
             CREATE TABLE IF NOT EXISTS notificaciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

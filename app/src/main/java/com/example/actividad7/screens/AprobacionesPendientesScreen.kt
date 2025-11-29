@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.example.actividad7.DatabaseManager
 
 @Composable
-fun AprobacionesPendientesScreen() {
+fun AprobacionesPendientesScreen(userRole: Int) { // 🔥 Recibe el ROL
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
@@ -26,7 +26,8 @@ fun AprobacionesPendientesScreen() {
 
     fun cargarDatos() {
         pendientes.clear()
-        pendientes.addAll(dbManager.obtenerPendientesAprobacion())
+        // 🔥 Pasamos el rol para filtrar qué pendientes ve
+        pendientes.addAll(dbManager.obtenerPendientesAprobacion(userRole))
     }
 
     LaunchedEffect(Unit) {
@@ -40,7 +41,8 @@ fun AprobacionesPendientesScreen() {
 
         if (seleccionado == null) {
             // LISTA
-            Text("Aprobaciones Pendientes", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            val titulo = if (userRole == 2) "Aprobaciones Planta" else "Aprobaciones Mtto"
+            Text(titulo, style = MaterialTheme.typography.titleLarge, color = Color.White)
             Spacer(Modifier.height(16.dp))
 
             if (pendientes.isEmpty()) {
@@ -57,7 +59,11 @@ fun AprobacionesPendientesScreen() {
                             Column(Modifier.padding(16.dp)) {
                                 Text("No. Parte: ${item["numero_parte_proveedor"]}", fontWeight = FontWeight.Bold, color = Color.White)
                                 Text("Descripción: ${item["descripcion"]}", color = Color.White)
-                                Text("Solicitante ID: ${item["usuario_id"]}", fontSize = MaterialTheme.typography.bodySmall.fontSize, color = Color.White.copy(alpha = 0.7f))
+
+                                // Mostrar estado actual si es Planta
+                                if (userRole == 2) {
+                                    Text("Mtto: ${item["aprobacion_mtto"]}", color = Color.Green, fontSize = MaterialTheme.typography.bodySmall.fontSize)
+                                }
                             }
                         }
                     }
@@ -74,8 +80,6 @@ fun AprobacionesPendientesScreen() {
                 DetalleTexto("Descripción:", seleccionado!!["descripcion"].toString())
                 DetalleTexto("Costo:", "$ ${seleccionado!!["costo"]}")
                 DetalleTexto("Área:", seleccionado!!["area"].toString())
-                DetalleTexto("Cantidad:", seleccionado!!["cantidad"].toString())
-                DetalleTexto("Observación:", seleccionado!!["observacion"].toString())
                 DetalleTexto("Familia:", seleccionado!!["familia"].toString())
 
                 Spacer(Modifier.height(24.dp))
@@ -85,7 +89,8 @@ fun AprobacionesPendientesScreen() {
                     Button(
                         onClick = {
                             val id = seleccionado!!["id"].toString().toInt()
-                            if (dbManager.actualizarEstadoAprobacion(id, "NO")) {
+                            // 🔥 Pasamos el ROL para saber qué columna actualizar
+                            if (dbManager.actualizarEstadoAprobacion(id, "NO", userRole)) {
                                 Toast.makeText(context, "Registro RECHAZADO", Toast.LENGTH_SHORT).show()
                                 cargarDatos()
                                 seleccionado = null
@@ -97,7 +102,8 @@ fun AprobacionesPendientesScreen() {
                     Button(
                         onClick = {
                             val id = seleccionado!!["id"].toString().toInt()
-                            if (dbManager.actualizarEstadoAprobacion(id, "SI")) {
+                            // 🔥 Pasamos el ROL para saber qué columna actualizar
+                            if (dbManager.actualizarEstadoAprobacion(id, "SI", userRole)) {
                                 Toast.makeText(context, "Registro APROBADO", Toast.LENGTH_SHORT).show()
                                 cargarDatos()
                                 seleccionado = null
