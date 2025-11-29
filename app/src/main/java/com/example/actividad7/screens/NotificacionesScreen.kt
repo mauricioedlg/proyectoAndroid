@@ -27,11 +27,9 @@ fun NotificacionesScreen(
 
     val notificaciones = remember { mutableStateListOf<Map<String, Any>>() }
 
-    // Cargar
     fun cargar() {
         notificaciones.clear()
         notificaciones.addAll(dbManager.obtenerNotificaciones(usuarioId))
-        // Marcamos como leídas (visual) pero NO las borramos
         dbManager.marcarNotificacionesComoLeidas(usuarioId)
     }
 
@@ -59,15 +57,14 @@ fun NotificacionesScreen(
                         mensaje = mensaje,
                         esRechazo = esRechazo,
                         onClick = {
-                            // 🔥 LÓGICA DE REDIRECCIÓN CORREGIDA
-                            if (userRole == 1 || userRole == 0 || userRole == 2) {
-                                // ES GERENTE (Mtto o Planta) o ADMIN:
-                                // Van a aprobar
+                            if (userRole == 1 || userRole == 2) {
+                                // Gerentes -> Aprobaciones
                                 onNavigate("Aprobaciones pendientes")
+                            } else if (userRole == 3) {
+                                // 🔥 Almacenista -> Pendientes MFG
+                                onNavigate("Pendientes MFG")
                             } else {
-                                // ES USUARIO NORMAL:
-                                // Solo navega para ver sus altas.
-                                // 🔥 YA NO SE BORRA LA NOTIFICACIÓN (Historial preservado)
+                                // Usuario -> Mis Altas
                                 onNavigate("Mis Altas")
                             }
                         }

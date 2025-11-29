@@ -43,10 +43,17 @@ fun MainScreen() {
 
     val menuItems = remember(currentUser) {
         val items = mutableListOf("Inicio", "Formulario", "Mis Altas", "Altas Globales", "Corregir refacciones")
-        // 🔥 AHORA TAMBIÉN ROL 2 (PLANTA) VE ESTO
-        if (currentUser.rol == 1 || currentUser.rol == 0 || currentUser.rol == 2) {
+
+        // Gerentes y Admin ven Aprobaciones
+        if (currentUser.rol == 1 || currentUser.rol == 2 || currentUser.rol == 0) {
             items.add("Aprobaciones pendientes")
         }
+
+        // 🔥 ALMACENISTA (Rol 3) O Admin ven Pendientes MFG
+        if (currentUser.rol == 3 || currentUser.rol == 0) {
+            items.add("Pendientes MFG")
+        }
+
         items.add("Cerrar Sesión")
         items
     }
@@ -114,7 +121,9 @@ fun MainScreen() {
                         "Mis Altas" -> MisAltasScreen(usuarioId = currentUser.id)
                         "Altas Globales" -> AltasGlobalesScreen()
                         "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
-                        "Aprobaciones pendientes" -> AprobacionesPendientesScreen(userRole = currentUser.rol) // Pasamos rol
+                        "Aprobaciones pendientes" -> AprobacionesPendientesScreen(userRole = currentUser.rol)
+                        // 🔥 NUEVA PANTALLA
+                        "Pendientes MFG" -> PendientesMfgScreen()
                         "Notificaciones" -> NotificacionesScreen(
                             usuarioId = currentUser.id,
                             userRole = currentUser.rol,

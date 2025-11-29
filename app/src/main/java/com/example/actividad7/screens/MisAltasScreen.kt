@@ -40,7 +40,8 @@ fun MisAltasScreen(usuarioId: Int) {
                     Row(Modifier.background(Color(0xFF003366))) {
                         TablaHeader("ID", 80)
                         TablaHeader("Aprob. MTTO", 120)
-                        TablaHeader("Aprob. PLANTA", 120) // 🔥
+                        TablaHeader("Aprob. PLANTA", 120)
+                        TablaHeader("No. MFG", 120) // 🔥 NUEVA COLUMNA
                         TablaHeader("Descripción", 200)
                         TablaHeader("Costo", 120)
                         TablaHeader("Área", 140)
@@ -51,7 +52,8 @@ fun MisAltasScreen(usuarioId: Int) {
                             Row(Modifier.background(Color(0x22003366))) {
                                 TablaCell(ref["id"]?.toString(), 80)
                                 TablaCell(ref["aprobacion_mtto"]?.toString(), 120)
-                                TablaCell(ref["aprobacion_planta"]?.toString(), 120) // 🔥
+                                TablaCell(ref["aprobacion_planta"]?.toString(), 120)
+                                TablaCell(ref["numero_mfg"]?.toString(), 120) // 🔥 NUEVA CELDA
                                 TablaCell(ref["descripcion"]?.toString(), 200)
                                 TablaCell(ref["costo"]?.toString(), 120)
                                 TablaCell(ref["area"]?.toString(), 140)

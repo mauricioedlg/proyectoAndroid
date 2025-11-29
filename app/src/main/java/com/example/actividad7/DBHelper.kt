@@ -8,7 +8,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     context,
     "proyectoAndroid.db",
     null,
-    13 // 🔥 Versión 13: Persistencia de datos arreglada
+    14 // 🔥 Versión 14: Agregamos numero_mfg
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         crearTablaUsuarios(db)
@@ -17,13 +17,14 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 🔥 CORRECCIÓN IMPORTANTE:
-        // Ya NO borramos las tablas (DROP). Así tus datos se guardan aunque actualices la app.
-        // Solo llamamos a crear por si falta alguna tabla nueva.
+        // Recreamos tablas dinámicas (Seguimos protegiendo Usuarios)
+        db.execSQL("DROP TABLE IF EXISTS refacciones")
+        db.execSQL("DROP TABLE IF EXISTS notificaciones")
 
-        crearTablaUsuarios(db)
         crearTablaRefacciones(db)
         crearTablaNotificaciones(db)
+
+        crearTablaUsuarios(db)
     }
 
     private fun crearTablaUsuarios(db: SQLiteDatabase) {
@@ -43,6 +44,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     private fun crearTablaRefacciones(db: SQLiteDatabase) {
+        // 🔥 Agregamos numero_mfg
         db.execSQL("""
             CREATE TABLE IF NOT EXISTS refacciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +68,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 usuario_id INTEGER NOT NULL DEFAULT 1,
                 aprobacion_mtto TEXT DEFAULT 'PENDIENTE',
                 aprobacion_planta TEXT DEFAULT 'PENDIENTE',
+                numero_mfg TEXT DEFAULT '', 
                 FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
             );
         """.trimIndent())
