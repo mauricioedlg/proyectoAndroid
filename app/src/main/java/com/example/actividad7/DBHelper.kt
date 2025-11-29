@@ -8,24 +8,27 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     context,
     "proyectoAndroid.db",
     null,
-    8 // 🔥 Versión 8: Forzará la actualización de la tabla refacciones
+    11 // 🔥 Versión 11: Estructura con notificaciones vinculadas
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         crearTablaUsuarios(db)
         crearTablaRefacciones(db)
+        crearTablaNotificaciones(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 🔥 ACTUALIZACIÓN:
-        // Solo borramos y recreamos 'refacciones' para quitar la columna 'foto'.
-        // NO tocamos la tabla 'usuarios' para respetar tus datos actuales.
-
+        // Recreamos tablas dinámicas
         db.execSQL("DROP TABLE IF EXISTS refacciones")
+        db.execSQL("DROP TABLE IF EXISTS notificaciones")
+
         crearTablaRefacciones(db)
+        crearTablaNotificaciones(db)
+
+        // Usuarios se mantiene intacto para no borrar tus logins
+        crearTablaUsuarios(db)
     }
 
     private fun crearTablaUsuarios(db: SQLiteDatabase) {
-        // Solo crea la estructura si no existe. NO inserta datos.
         db.execSQL("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 UsuarioID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +45,6 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     private fun crearTablaRefacciones(db: SQLiteDatabase) {
-        // Tabla SIN la columna 'foto'
         db.execSQL("""
             CREATE TABLE IF NOT EXISTS refacciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +68,20 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 usuario_id INTEGER NOT NULL DEFAULT 1,
                 aprobacion_mtto TEXT DEFAULT 'PENDIENTE',
                 FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
+            );
+        """.trimIndent())
+    }
+
+    private fun crearTablaNotificaciones(db: SQLiteDatabase) {
+        // 🔥 Tabla con refaccion_id para el borrado automático
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS notificaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_destinoa_id INTEGER NOT NULL,
+                mensaje TEXT NOT NULL,
+                refaccion_id INTEGER, 
+                leido INTEGER DEFAULT 0,
+                FOREIGN KEY(usuario_destinoa_id) REFERENCES usuarios(UsuarioID)
             );
         """.trimIndent())
     }

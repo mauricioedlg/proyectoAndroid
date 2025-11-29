@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation // 🔥 IMPORTACIÓN NECESARIA
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.example.actividad7.DatabaseManager
@@ -20,7 +21,6 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
-    // 🔥 AHORA ES USERNAME, YA NO CORREO
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
@@ -60,7 +60,6 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
                     color = Color.White
                 )
 
-                // 🔥 CAMBIADO A USERNAME
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it; isError = false },
@@ -71,11 +70,14 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // CAMPO DE CONTRASEÑA
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it; isError = false },
                     label = { Text("Contraseña") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White.copy(alpha = 0.7f)) },
+                    // 🔥 ESTA LÍNEA OCULTA LA CONTRASEÑA
+                    visualTransformation = PasswordVisualTransformation(),
                     isError = isError,
                     colors = colors,
                     modifier = Modifier.fillMaxWidth()
@@ -91,7 +93,6 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
 
                 Button(
                     onClick = {
-                        // 🔥 AHORA SE VALIDA POR USERNAME
                         val usuario = dbManager.validarUsuarioPorUsername(username, password)
 
                         if (usuario != null) {
@@ -113,4 +114,3 @@ fun LoginScreen(onLoginSuccess: (Usuario) -> Unit) {
         }
     }
 }
-
