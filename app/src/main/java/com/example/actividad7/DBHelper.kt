@@ -8,12 +8,26 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     context,
     "proyectoAndroid.db",
     null,
-    3 // Subimos versión para forzar la actualización
+    8 // 🔥 Versión 8: Forzará la actualización de la tabla refacciones
 ) {
     override fun onCreate(db: SQLiteDatabase) {
-        // Tabla Usuarios
+        crearTablaUsuarios(db)
+        crearTablaRefacciones(db)
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // 🔥 ACTUALIZACIÓN:
+        // Solo borramos y recreamos 'refacciones' para quitar la columna 'foto'.
+        // NO tocamos la tabla 'usuarios' para respetar tus datos actuales.
+
+        db.execSQL("DROP TABLE IF EXISTS refacciones")
+        crearTablaRefacciones(db)
+    }
+
+    private fun crearTablaUsuarios(db: SQLiteDatabase) {
+        // Solo crea la estructura si no existe. NO inserta datos.
         db.execSQL("""
-            CREATE TABLE usuarios (
+            CREATE TABLE IF NOT EXISTS usuarios (
                 UsuarioID INTEGER PRIMARY KEY AUTOINCREMENT,
                 Username TEXT NOT NULL UNIQUE,
                 Correo TEXT NOT NULL UNIQUE,
@@ -25,23 +39,12 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 NumeroDeSitio INTEGER NOT NULL
             );
         """.trimIndent())
+    }
 
-        // 🔥 USUARIOS INICIALES Y SUS CONTRASEÑAS ACTUALIZADAS
-        // Insertamos todos los usuarios para que el login funcione
+    private fun crearTablaRefacciones(db: SQLiteDatabase) {
+        // Tabla SIN la columna 'foto'
         db.execSQL("""
-            INSERT INTO usuarios (UsuarioID, Username, Correo, Contrasena, Nombre, Apellidos, Rol, NumeroDeSitio)
-            VALUES 
-            (3, 'mauricio.estrada', 'mauricio.estrada@clarios.com', 'Pinos364123', 'Mauricio', 'Estrada De la Garza', 1, 13),
-            (6, 'biancanava', 'bianca.nava@clarios.com', '987654321', 'Bianca', 'Nava', 4, 13),
-            (7, 'benjamin.garcia', 'benjamin.garcia@clarios.com', 'ggez2003', 'Benjamin', 'Garcia', 3, 13),
-            (8, 'julian.basurto', 'julian.basurto@clarios.com', 'clarios.com!', 'Julian', 'Basurto', 6, 13),
-            (9, 'ricardo.medrano', 'ricardo.medrano@clarios.com', 'celayaPlanta', 'Ricardo', 'Medrano', 6, 13),
-            (10, 'jesus.torres', 'jesus.torres@clarios.com', 'torreonPlanta', 'Jesus', 'Torres', 6, 13);
-        """.trimIndent())
-
-        // Tabla Refacciones
-        db.execSQL("""
-            CREATE TABLE refacciones (
+            CREATE TABLE IF NOT EXISTS refacciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 descripcion TEXT,
                 costo REAL,
@@ -60,17 +63,10 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 existe_riesgo TEXT,
                 nacionalidad TEXT,
                 pagina_web TEXT,
-                foto BLOB,
                 usuario_id INTEGER NOT NULL DEFAULT 1,
+                aprobacion_mtto TEXT DEFAULT 'PENDIENTE',
                 FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
             );
         """.trimIndent())
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Borra las tablas existentes y llama a onCreate para recrearlas con los datos actualizados.
-        db.execSQL("DROP TABLE IF EXISTS refacciones")
-        db.execSQL("DROP TABLE IF EXISTS usuarios")
-        onCreate(db)
     }
 }

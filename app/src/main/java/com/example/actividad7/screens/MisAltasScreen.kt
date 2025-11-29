@@ -40,22 +40,19 @@ fun MisAltasScreen(usuarioId: Int) {
         Spacer(Modifier.height(12.dp))
 
         if (registros.isEmpty()) {
-
             Text("No hay registros.", color = Color.White)
-
         } else {
-
             Row(
                 Modifier
                     .horizontalScroll(rememberScrollState())
                     .fillMaxWidth()
             ) {
-
                 Column {
-
                     // ---------------- ENCABEZADOS ----------------
                     Row(Modifier.background(Color(0xFF003366))) {
                         TablaHeader("ID", 80)
+                        // 🔥 COLUMNA APROBACIÓN
+                        TablaHeader("Aprobación MTTO", 120)
                         TablaHeader("Descripción", 200)
                         TablaHeader("Costo", 120)
                         TablaHeader("Área", 140)
@@ -77,12 +74,11 @@ fun MisAltasScreen(usuarioId: Int) {
 
                     // ---------------- FILAS ----------------
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-
                         registros.forEach { ref ->
-
                             Row(Modifier.background(Color(0x22003366))) {
-
                                 TablaCell(ref["id"]?.toString(), 80)
+                                // 🔥 CELDA APROBACIÓN
+                                TablaCell(ref["aprobacion_mtto"]?.toString(), 120)
                                 TablaCell(ref["descripcion"]?.toString(), 200)
                                 TablaCell(ref["costo"]?.toString(), 120)
                                 TablaCell(ref["area"]?.toString(), 140)
@@ -101,7 +97,6 @@ fun MisAltasScreen(usuarioId: Int) {
                                 TablaCell(ref["nacionalidad"]?.toString(), 150)
                                 TablaCell(ref["pagina_web"]?.toString(), 200)
                             }
-
                             Divider(color = Color.White.copy(alpha = 0.3f))
                         }
                     }

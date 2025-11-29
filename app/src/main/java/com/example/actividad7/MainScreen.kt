@@ -1,4 +1,3 @@
-
 @file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.example.actividad7
@@ -21,50 +20,56 @@ import com.example.actividad7.screens.CorregirRefaccionesScreen
 import com.example.actividad7.screens.FormularioScreen
 import com.example.actividad7.screens.MisAltasScreen
 import com.example.actividad7.screens.LoginScreen
+import com.example.actividad7.screens.AprobacionesPendientesScreen
+import com.example.actividad7.screens.PantallaSimple
 
 @Composable
 fun MainScreen() {
 
-    val context = LocalContext.current
-    val dbManager = remember { DatabaseManager(context) }
-
-    var isAuthenticated by remember { mutableStateOf(false) }
-
-    // Usuario por defecto (obligatorio username)
+    // Usuario invitado con rol -1 para evitar conflictos
     val defaultUser = Usuario(
         id = 0,
         nombre = "Invitado",
-        username = "invitado"
+        username = "invitado",
+        rol = -1
     )
 
     var currentUser by remember { mutableStateOf(defaultUser) }
+    var isAuthenticated by remember { mutableStateOf(false) }
 
-    // Drawer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    val menuItems = listOf(
-        "Inicio",
-        "Formulario",
-        "Mis Altas",
-        "Altas Globales",
-        "Corregir refacciones",
-        "Cerrar Sesión"
-    )
+    // Menú dinámico
+    val menuItems = remember(currentUser) {
+        val items = mutableListOf(
+            "Inicio",
+            "Formulario",
+            "Mis Altas",
+            "Altas Globales",
+            "Corregir refacciones"
+        )
+
+        // 🔥 CORRECCIÓN: Ahora permitimos Rol 1 (Gerente Mantenimiento) Y Rol 0 (Admin)
+        if (currentUser.rol == 1 || currentUser.rol == 0) {
+            items.add("Aprobaciones pendientes")
+        }
+
+        items.add("Cerrar Sesión")
+        items
+    }
 
     var currentScreen by remember { mutableStateOf("Inicio") }
 
     if (!isAuthenticated) {
-
         LoginScreen(
             onLoginSuccess = { usuario ->
                 currentUser = usuario
                 isAuthenticated = true
+                currentScreen = "Inicio"
             }
         )
-
     } else {
-
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -74,7 +79,23 @@ fun MainScreen() {
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.titleLarge
                     )
-                    Divider()
+
+                    val nombreRol = when(currentUser.rol) {
+                        0 -> "Admin"
+                        1 -> "Gte. Mantenimiento"
+                        2 -> "Gte. Planta"
+                        3 -> "Almacenista"
+                        4 -> "Comprador"
+                        else -> "Usuario"
+                    }
+
+                    Text(
+                        text = "Usuario: ${currentUser.username}\nRol: $nombreRol",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                     menuItems.forEach { item ->
                         NavigationDrawerItem(
@@ -82,7 +103,6 @@ fun MainScreen() {
                             selected = item == currentScreen,
                             onClick = {
                                 scope.launch { drawerState.close() }
-
                                 if (item == "Cerrar Sesión") {
                                     isAuthenticated = false
                                     currentUser = defaultUser
@@ -96,71 +116,36 @@ fun MainScreen() {
                 }
             }
         ) {
-
             Scaffold(
                 topBar = {
                     CenterAlignedTopAppBar(
-                        title = {
-                            Text(
-                                text = currentScreen,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        },
+                        title = { Text(currentScreen, color = MaterialTheme.colorScheme.onBackground) },
                         navigationIcon = {
-                            IconButton(
-                                onClick = { scope.launch { drawerState.open() } }
-                            ) {
-                                Icon(
-                                    Icons.Default.Menu,
-                                    contentDescription = "Abrir menú",
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menú", tint = MaterialTheme.colorScheme.onBackground)
                             }
                         }
                     )
                 }
             ) { innerPadding ->
-
                 Box(
                     modifier = Modifier
                         .padding(innerPadding)
                         .fillMaxSize()
-                        .padding(16.dp)
-                        .clickable(enabled = drawerState.isOpen) {
-                            scope.launch { drawerState.close() }
-                        },
+                        .padding(16.dp),
                     contentAlignment = Alignment.TopCenter
                 ) {
-
                     when (currentScreen) {
-                        "Inicio" -> HomeScreen(nombreUsuario = currentUser.nombre)
+                        "Inicio" -> PantallaSimple(nombreUsuario = currentUser.nombre)
                         "Formulario" -> FormularioScreen(usuarioId = currentUser.id)
                         "Mis Altas" -> MisAltasScreen(usuarioId = currentUser.id)
                         "Altas Globales" -> AltasGlobalesScreen()
                         "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
-                        else ->
-                            Text("Pantalla no encontrada: $currentScreen", color = Color.Red)
+                        "Aprobaciones pendientes" -> AprobacionesPendientesScreen()
+                        else -> Text("Pantalla no encontrada", color = Color.Red)
                     }
                 }
             }
         }
-    }
-}
-
-// HomeScreen
-@Composable
-fun HomeScreen(nombreUsuario: String) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "Bienvenido, $nombreUsuario",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Usa el menú para navegar.", color = MaterialTheme.colorScheme.onBackground)
     }
 }

@@ -1,18 +1,12 @@
 package com.example.actividad7.screens
 
-import android.graphics.BitmapFactory
-import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.actividad7.DatabaseManager
@@ -22,7 +16,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
-    // Campos del formulario (Declaración de estado)
+    // Campos del formulario
     var descripcion by remember { mutableStateOf("") }
     var costo by remember { mutableStateOf("") }
     var area by remember { mutableStateOf("") }
@@ -31,7 +25,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     var unidad by remember { mutableStateOf("") }
     var cantidad by remember { mutableStateOf("") }
     var observacion by remember { mutableStateOf("") }
-    var numeroParte by remember { mutableStateOf("") } // numero_parte_proveedor
+    var numeroParte by remember { mutableStateOf("") }
     var marcaProveedor by remember { mutableStateOf("") }
     var equiposAUsar by remember { mutableStateOf("") }
     var familia by remember { mutableStateOf("") }
@@ -41,19 +35,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     var nacionalidad by remember { mutableStateOf("") }
     var paginaWeb by remember { mutableStateOf("") }
 
-    var imagenSeleccionada by remember { mutableStateOf<ByteArray?>(null) }
-
-    // El launcher para seleccionar imagen se mantiene, aunque se omite la parte visual en el formulario
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let {
-            val inputStream = context.contentResolver.openInputStream(it)
-            imagenSeleccionada = inputStream?.readBytes()
-        }
-    }
-
-    // Configuración de colores para los campos de texto (Blanco sobre Morado)
+    // Configuración de colores
     val textColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
@@ -64,7 +46,6 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
         cursorColor = Color.White
     )
 
-    // Definición del color Azul Marino
     val AzulMarino = Color(0xFF003366)
 
     LazyColumn(
@@ -73,15 +54,13 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     ) {
         item { Text("Registrar Refacción", style = MaterialTheme.typography.titleLarge, color = Color.White) }
 
-        // CAMPOS OBLIGATORIOS Y BÁSICOS (Agrupados arriba)
+        // Campos
         item { OutlinedTextField(value = numeroParte, onValueChange = { numeroParte = it }, label = { Text("Número parte (Obligatorio)") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = descripcion, onValueChange = { descripcion = it }, label = { Text("Descripción") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = costo, onValueChange = { costo = it }, label = { Text("Costo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = cantidad, onValueChange = { cantidad = it }, label = { Text("Cantidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Área") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = familia, onValueChange = { familia = it }, label = { Text("Familia") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
-
-        // CAMPOS ADICIONALES (El resto de la tabla)
         item { OutlinedTextField(value = consumo, onValueChange = { consumo = it }, label = { Text("Consumo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = frecuencia, onValueChange = { frecuencia = it }, label = { Text("Frecuencia") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = unidad, onValueChange = { unidad = it }, label = { Text("Unidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
@@ -94,8 +73,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
         item { OutlinedTextField(value = nacionalidad, onValueChange = { nacionalidad = it }, label = { Text("Nacionalidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = paginaWeb, onValueChange = { paginaWeb = it }, label = { Text("Página Web") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
 
-
-        // BOTÓN DE ENVÍO
+        // Botón Enviar
         item {
             Button(
                 onClick = {
@@ -122,7 +100,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
                         "existe_riesgo" to existeRiesgo,
                         "nacionalidad" to nacionalidad,
                         "pagina_web" to paginaWeb,
-                        "foto" to imagenSeleccionada,
+                        // "foto" to imagenSeleccionada, // 🔥 ELIMINADO
                         "usuario_id" to usuarioId
                     )
 
@@ -130,15 +108,14 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
 
                     if (result != -1L) {
                         Toast.makeText(context, "Guardado con éxito", Toast.LENGTH_SHORT).show()
-                        // Limpiar campos críticos
-                        descripcion = ""; numeroParte = ""; cantidad = ""; imagenSeleccionada = null
+                        // Limpiar campos
+                        descripcion = ""; numeroParte = ""; cantidad = "";
                         costo = ""; area = ""; consumo = ""; frecuencia = ""; unidad = ""; observacion = ""; marcaProveedor = ""; equiposAUsar = ""; familia = ""; reemplazable = ""; reduceVelocidad = ""; existeRiesgo = ""; nacionalidad = ""; paginaWeb = ""
                     } else {
-                        Toast.makeText(context, "Error al guardar (revise log)", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Error al guardar. Verifique si el No. Parte ya existe.", Toast.LENGTH_LONG).show()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                // 🔥 CAMBIO DE COLOR DEL BOTÓN: Fondo Azul Marino, Letra Blanca, y texto "Enviar"
                 colors = ButtonDefaults.buttonColors(containerColor = AzulMarino, contentColor = Color.White)
             ) {
                 Text("ENVIAR")
