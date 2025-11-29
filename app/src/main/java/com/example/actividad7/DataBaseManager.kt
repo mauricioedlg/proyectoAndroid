@@ -13,29 +13,15 @@ data class Usuario(
 )
 
 class DatabaseManager(context: Context) :
-// NOTA: Usamos 'proyectoAndroid.db' para el archivo de la base de datos real
-// La versión la dejamos en 3 para que coincida con DBHelper si lo usas.
     SQLiteOpenHelper(context, "proyectoAndroid.db", null, 3) {
 
-    // NOTA: Estas funciones on* ya no son críticas si usas DBHelper y DataBaseUtils para copiar el archivo .db
-    // Pero se mantienen para la estructura de SQLiteOpenHelper.
+    override fun onCreate(db: SQLiteDatabase) { /* NO SE CREA, VIENE DE ASSETS */ }
 
-    // 💡 IMPORTANTE: Si estás usando DataBaseUtils para copiar un archivo .db,
-    // estas funciones onCreate y onUpgrade deben ser las de DBHelper.kt.
-    // En tu proyecto, estás usando un DatabaseManager para la lógica y un DBHelper para la creación/copia.
-    // Vamos a mover la lógica de acceso a datos aquí y quitar las funciones de creación de DB para evitar conflictos
-    // con el archivo .db que se copia (proyectoAndroid.db) por DataBaseUtils.
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) { /* NO USAR */ }
 
-    // Dejamos las on* mínimas, la lógica de creación real debe estar en DBHelper.kt
-    override fun onCreate(db: SQLiteDatabase) {
-        // No hacer nada, se asume que la base de datos se copia de assets/proyectoAndroid.db
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // No hacer nada, la lógica de upgrade la maneja el DBHelper si se necesita
-    }
-
-    // VALIDAR LOGIN POR USERNAME (Ya estaba correcta, pero ajustamos a la tabla 'usuarios' real)
+    // ============================================================
+    // VALIDAR LOGIN
+    // ============================================================
     fun validarUsuarioPorUsername(username: String, password: String): Usuario? {
         val db = readableDatabase
         val cursor = db.rawQuery(
@@ -58,15 +44,12 @@ class DatabaseManager(context: Context) :
     }
 
     // ============================================================
-    //  NUEVAS FUNCIONES PARA REFACCIONES
+    // INSERTAR REFACCIÓN
     // ============================================================
-
-    // 1. INSERTAR REFACCIÓN (Para FormularioScreen.kt)
     fun insertarRefaccion(datos: Map<String, Any?>): Long {
         val db = writableDatabase
         val values = ContentValues()
 
-        // Mapear los datos de Map<String, Any?> a ContentValues
         datos.forEach { (key, value) ->
             when (value) {
                 is String -> values.put(key, value)
@@ -74,19 +57,21 @@ class DatabaseManager(context: Context) :
                 is Double -> values.put(key, value)
                 is ByteArray -> values.put(key, value)
                 null -> values.putNull(key)
-                else -> Log.e("DBManager", "Tipo de dato no soportado para key: $key")
+                else -> Log.e("DBManager", "Tipo de dato no soportado: $key")
             }
         }
 
         return try {
             db.insertOrThrow("refacciones", null, values)
         } catch (e: Exception) {
-            Log.e("DBManager", "Error al insertar refacción: ${e.message}")
+            Log.e("DBManager", "Error insertando refacción: ${e.message}")
             -1L
         }
     }
 
-    // 2. ACTUALIZAR REFACCIÓN (Para EditarRefaccionForm.kt)
+    // ============================================================
+    // ACTUALIZAR REFACCIÓN
+    // ============================================================
     fun actualizarRefaccion(id: String, datos: Map<String, Any?>): Boolean {
         val db = writableDatabase
         val values = ContentValues()
@@ -98,32 +83,32 @@ class DatabaseManager(context: Context) :
                 is Double -> values.put(key, value)
                 is ByteArray -> values.put(key, value)
                 null -> values.putNull(key)
-                else -> Log.e("DBManager", "Tipo de dato no soportado para key: $key")
+                else -> Log.e("DBManager", "Tipo no soportado: $key")
             }
         }
 
-        val filasActualizadas = db.update("refacciones", values, "id = ?", arrayOf(id))
-        return filasActualizadas > 0
+        val filas = db.update("refacciones", values, "id = ?", arrayOf(id))
+        return filas > 0
     }
 
     // ============================================================
-    //  OBTENER REFACCIONES (Para AltasGlobalesScreen y MisAltasScreen)
+    // OBTENER TODAS LAS REFACCIONES (ALTAS GLOBALES)
     // ============================================================
     fun obtenerRefacciones(): List<Map<String, Any?>> {
         val db = readableDatabase
         val lista = mutableListOf<Map<String, Any?>>()
 
-        // Seleccionar todos los campos necesarios para las pantallas de Altas
         val cursor = db.rawQuery(
             """
             SELECT id, descripcion, costo, area, consumo, numero_parte_proveedor, familia
             FROM refacciones
-            """.trimIndent(), null
+            """.trimIndent(),
+            null
         )
 
         if (cursor.moveToFirst()) {
             do {
-                val registro = mapOf(
+                val reg = mapOf(
                     "id" to cursor.getInt(cursor.getColumnIndexOrThrow("id")),
                     "descripcion" to cursor.getString(cursor.getColumnIndexOrThrow("descripcion")),
                     "costo" to cursor.getDouble(cursor.getColumnIndexOrThrow("costo")),
@@ -132,7 +117,7 @@ class DatabaseManager(context: Context) :
                     "numero_parte_proveedor" to cursor.getString(cursor.getColumnIndexOrThrow("numero_parte_proveedor")),
                     "familia" to cursor.getString(cursor.getColumnIndexOrThrow("familia"))
                 )
-                lista.add(registro)
+                lista.add(reg)
             } while (cursor.moveToNext())
         }
 
@@ -140,4 +125,38 @@ class DatabaseManager(context: Context) :
         return lista
     }
 
+    // ============================================================
+    // OBTENER REFACCIONES DE UN USUARIO
+    // ============================================================
+    fun obtenerRefaccionesPorUsuario(usuarioId: Int): List<Map<String, Any?>> {
+        val db = readableDatabase
+        val lista = mutableListOf<Map<String, Any?>>()
+
+        val cursor = db.rawQuery(
+            """
+            SELECT id, descripcion, costo, area, consumo, numero_parte_proveedor, familia
+            FROM refacciones
+            WHERE usuario_id = ?
+            """.trimIndent(),
+            arrayOf(usuarioId.toString())
+        )
+
+        if (cursor.moveToFirst()) {
+            do {
+                val reg = mapOf(
+                    "id" to cursor.getInt(cursor.getColumnIndexOrThrow("id")),
+                    "descripcion" to cursor.getString(cursor.getColumnIndexOrThrow("descripcion")),
+                    "costo" to cursor.getDouble(cursor.getColumnIndexOrThrow("costo")),
+                    "area" to cursor.getString(cursor.getColumnIndexOrThrow("area")),
+                    "consumo" to cursor.getString(cursor.getColumnIndexOrThrow("consumo")),
+                    "numero_parte_proveedor" to cursor.getString(cursor.getColumnIndexOrThrow("numero_parte_proveedor")),
+                    "familia" to cursor.getString(cursor.getColumnIndexOrThrow("familia"))
+                )
+                lista.add(reg)
+            } while (cursor.moveToNext())
+        }
+
+        cursor.close()
+        return lista
+    }
 }

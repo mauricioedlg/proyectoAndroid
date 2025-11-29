@@ -26,14 +26,20 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
             );
         """.trimIndent())
 
-        // Usuario por defecto
+        // 🔥 USUARIOS INICIALES Y SUS CONTRASEÑAS ACTUALIZADAS
+        // Insertamos todos los usuarios para que el login funcione
         db.execSQL("""
-            INSERT INTO usuarios (Username, Correo, Contrasena, Nombre, Apellidos, Rol, NumeroDeSitio)
+            INSERT INTO usuarios (UsuarioID, Username, Correo, Contrasena, Nombre, Apellidos, Rol, NumeroDeSitio)
             VALUES 
-            ('mauricio.estrada', 'mauricio.estrada@clarios.com', '1234567890', 'Mauricio', 'Estrada', 1, 13);
+            (3, 'mauricio.estrada', 'mauricio.estrada@clarios.com', 'Pinos364123', 'Mauricio', 'Estrada De la Garza', 1, 13),
+            (6, 'biancanava', 'bianca.nava@clarios.com', '987654321', 'Bianca', 'Nava', 4, 13),
+            (7, 'benjamin.garcia', 'benjamin.garcia@clarios.com', 'ggez2003', 'Benjamin', 'Garcia', 3, 13),
+            (8, 'julian.basurto', 'julian.basurto@clarios.com', 'clarios.com!', 'Julian', 'Basurto', 6, 13),
+            (9, 'ricardo.medrano', 'ricardo.medrano@clarios.com', 'celayaPlanta', 'Ricardo', 'Medrano', 6, 13),
+            (10, 'jesus.torres', 'jesus.torres@clarios.com', 'torreonPlanta', 'Jesus', 'Torres', 6, 13);
         """.trimIndent())
 
-        // Tabla Refacciones CORREGIDA (Sintaxis válida para SQLite)
+        // Tabla Refacciones
         db.execSQL("""
             CREATE TABLE refacciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +68,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // Borra las tablas existentes y llama a onCreate para recrearlas con los datos actualizados.
         db.execSQL("DROP TABLE IF EXISTS refacciones")
         db.execSQL("DROP TABLE IF EXISTS usuarios")
         onCreate(db)

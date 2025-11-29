@@ -135,9 +135,9 @@ fun MainScreen() {
                     when (currentScreen) {
                         "Inicio" -> HomeScreen(nombreUsuario = currentUser.nombre)
                         "Formulario" -> FormularioScreen(usuarioId = currentUser.id)
-                        "Mis Altas" -> MisAltasScreen()
+                        "Mis Altas" -> MisAltasScreen(usuarioId = currentUser.id)
                         "Altas Globales" -> AltasGlobalesScreen()
-                        "Corregir refacciones" -> CorregirRefaccionesScreen()
+                        "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
                         else ->
                             Text("Pantalla no encontrada: $currentScreen", color = Color.Red)
                     }

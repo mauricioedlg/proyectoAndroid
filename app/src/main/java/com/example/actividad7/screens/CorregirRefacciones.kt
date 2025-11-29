@@ -12,20 +12,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.actividad7.DatabaseManager
 
-// 💡 Asegurar la importación explícita aquí
-import com.example.actividad7.screens.EditarRefaccionForm
-
 @Composable
-fun CorregirRefaccionesScreen() {
+fun CorregirRefaccionesScreen(usuarioId: Int) {
+
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
+
     val lista = remember { mutableStateListOf<Map<String, Any?>>() }
     var seleccionada by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
-    // Recargar lista al inicio o cuando se vuelve de editar
     fun recargarLista() {
         lista.clear()
-        lista.addAll(dbManager.obtenerRefacciones())
+        lista.addAll(dbManager.obtenerRefaccionesPorUsuario(usuarioId))
     }
 
     LaunchedEffect(Unit) {
@@ -33,27 +31,33 @@ fun CorregirRefaccionesScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+
         if (seleccionada == null) {
+
             Text("Selecciona para Corregir", style = MaterialTheme.typography.titleLarge, color = Color.White)
             Spacer(Modifier.height(8.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
                 items(lista) { ref ->
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { seleccionada = ref },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                     ) {
+
                         Column(Modifier.padding(16.dp)) {
-                            Text("ID: ${ref["id"] ?: "N/A"}", color = Color.White)
-                            Text("Descripción: ${ref["descripcion"] ?: "N/A"}", color = Color.White)
+                            Text("ID: ${ref["id"]}", color = Color.White)
+                            Text("Descripción: ${ref["descripcion"]}", color = Color.White)
                         }
                     }
                 }
             }
+
         } else {
-            // Llamada al formulario de edición
+
             EditarRefaccionForm(
                 ref = seleccionada!!,
                 onVolver = {

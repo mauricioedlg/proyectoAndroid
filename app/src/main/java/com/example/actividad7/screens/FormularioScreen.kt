@@ -22,7 +22,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     val context = LocalContext.current
     val dbManager = remember { DatabaseManager(context) }
 
-    // Campos del formulario
+    // Campos del formulario (Declaración de estado)
     var descripcion by remember { mutableStateOf("") }
     var costo by remember { mutableStateOf("") }
     var area by remember { mutableStateOf("") }
@@ -31,7 +31,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
     var unidad by remember { mutableStateOf("") }
     var cantidad by remember { mutableStateOf("") }
     var observacion by remember { mutableStateOf("") }
-    var numeroParte by remember { mutableStateOf("") }
+    var numeroParte by remember { mutableStateOf("") } // numero_parte_proveedor
     var marcaProveedor by remember { mutableStateOf("") }
     var equiposAUsar by remember { mutableStateOf("") }
     var familia by remember { mutableStateOf("") }
@@ -43,6 +43,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
 
     var imagenSeleccionada by remember { mutableStateOf<ByteArray?>(null) }
 
+    // El launcher para seleccionar imagen se mantiene, aunque se omite la parte visual en el formulario
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -63,40 +64,38 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
         cursorColor = Color.White
     )
 
+    // Definición del color Azul Marino
+    val AzulMarino = Color(0xFF003366)
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { Text("Registrar Refacción", style = MaterialTheme.typography.titleLarge, color = Color.White) }
 
+        // CAMPOS OBLIGATORIOS Y BÁSICOS (Agrupados arriba)
         item { OutlinedTextField(value = numeroParte, onValueChange = { numeroParte = it }, label = { Text("Número parte (Obligatorio)") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = descripcion, onValueChange = { descripcion = it }, label = { Text("Descripción") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = costo, onValueChange = { costo = it }, label = { Text("Costo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Área") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = cantidad, onValueChange = { cantidad = it }, label = { Text("Cantidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Área") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = familia, onValueChange = { familia = it }, label = { Text("Familia") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
 
-        // ... (Puedes agregar el resto de campos si son necesarios, simplificado para brevedad visual)
+        // CAMPOS ADICIONALES (El resto de la tabla)
+        item { OutlinedTextField(value = consumo, onValueChange = { consumo = it }, label = { Text("Consumo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = frecuencia, onValueChange = { frecuencia = it }, label = { Text("Frecuencia") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = unidad, onValueChange = { unidad = it }, label = { Text("Unidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = observacion, onValueChange = { observacion = it }, label = { Text("Observación") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = marcaProveedor, onValueChange = { marcaProveedor = it }, label = { Text("Marca Proveedor") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = equiposAUsar, onValueChange = { equiposAUsar = it }, label = { Text("Equipos a Usar") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = reemplazable, onValueChange = { reemplazable = it }, label = { Text("Reemplazable") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = reduceVelocidad, onValueChange = { reduceVelocidad = it }, label = { Text("Reduce Velocidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = existeRiesgo, onValueChange = { existeRiesgo = it }, label = { Text("Existe Riesgo") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = nacionalidad, onValueChange = { nacionalidad = it }, label = { Text("Nacionalidad") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = paginaWeb, onValueChange = { paginaWeb = it }, label = { Text("Página Web") }, colors = textColors, modifier = Modifier.fillMaxWidth()) }
 
-        item {
-            Button(
-                onClick = { launcher.launch("image/*") },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Text("Seleccionar foto")
-            }
-        }
 
-        item {
-            imagenSeleccionada?.let {
-                val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                Image(
-                    bitmap.asImageBitmap(),
-                    contentDescription = "Foto seleccionada",
-                    modifier = Modifier.size(150.dp)
-                )
-            }
-        }
-
+        // BOTÓN DE ENVÍO
         item {
             Button(
                 onClick = {
@@ -124,7 +123,7 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
                         "nacionalidad" to nacionalidad,
                         "pagina_web" to paginaWeb,
                         "foto" to imagenSeleccionada,
-                        "usuario_id" to usuarioId // ✅ Aquí vinculamos al usuario
+                        "usuario_id" to usuarioId
                     )
 
                     val result = dbManager.insertarRefaccion(datos)
@@ -133,14 +132,16 @@ fun FormularioScreen(usuarioId: Int) { // Recibe el ID del usuario logueado
                         Toast.makeText(context, "Guardado con éxito", Toast.LENGTH_SHORT).show()
                         // Limpiar campos críticos
                         descripcion = ""; numeroParte = ""; cantidad = ""; imagenSeleccionada = null
+                        costo = ""; area = ""; consumo = ""; frecuencia = ""; unidad = ""; observacion = ""; marcaProveedor = ""; equiposAUsar = ""; familia = ""; reemplazable = ""; reduceVelocidad = ""; existeRiesgo = ""; nacionalidad = ""; paginaWeb = ""
                     } else {
                         Toast.makeText(context, "Error al guardar (revise log)", Toast.LENGTH_LONG).show()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = MaterialTheme.colorScheme.primary)
+                // 🔥 CAMBIO DE COLOR DEL BOTÓN: Fondo Azul Marino, Letra Blanca, y texto "Enviar"
+                colors = ButtonDefaults.buttonColors(containerColor = AzulMarino, contentColor = Color.White)
             ) {
-                Text("GUARDAR REFACCIÓN")
+                Text("ENVIAR")
             }
         }
     }
