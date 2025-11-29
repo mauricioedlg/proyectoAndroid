@@ -8,7 +8,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     context,
     "proyectoAndroid.db",
     null,
-    14 // 🔥 Versión 14: Agregamos numero_mfg
+    15 // 🔥 Versión 15: Agregamos esta_cotizado
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         crearTablaUsuarios(db)
@@ -17,13 +17,11 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Recreamos tablas dinámicas (Seguimos protegiendo Usuarios)
         db.execSQL("DROP TABLE IF EXISTS refacciones")
         db.execSQL("DROP TABLE IF EXISTS notificaciones")
 
         crearTablaRefacciones(db)
         crearTablaNotificaciones(db)
-
         crearTablaUsuarios(db)
     }
 
@@ -44,7 +42,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     private fun crearTablaRefacciones(db: SQLiteDatabase) {
-        // 🔥 Agregamos numero_mfg
+        // 🔥 Agregamos esta_cotizado DEFAULT 'PENDIENTE'
         db.execSQL("""
             CREATE TABLE IF NOT EXISTS refacciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,6 +67,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 aprobacion_mtto TEXT DEFAULT 'PENDIENTE',
                 aprobacion_planta TEXT DEFAULT 'PENDIENTE',
                 numero_mfg TEXT DEFAULT '', 
+                esta_cotizado TEXT DEFAULT 'PENDIENTE',
                 FOREIGN KEY(usuario_id) REFERENCES usuarios(UsuarioID)
             );
         """.trimIndent())

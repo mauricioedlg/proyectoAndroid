@@ -26,11 +26,9 @@ fun PantallaSimple(
     onNotificationClick: () -> Unit
 ) {
     Column(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(24.dp), Arrangement.Center, Alignment.CenterHorizontally
     ) {
         // Fila para el título "Hola" y el icono con badge
         Row(

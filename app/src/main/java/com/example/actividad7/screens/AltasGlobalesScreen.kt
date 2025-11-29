@@ -41,13 +41,12 @@ fun AltasGlobalesScreen() {
                         TablaHeader("ID", 60)
                         TablaHeader("Aprob. MTTO", 100)
                         TablaHeader("Aprob. PLANTA", 100)
-                        TablaHeader("No. MFG", 120) // 🔥 NUEVA COLUMNA
+                        TablaHeader("Cotizado", 100) // 🔥 NUEVO
+                        TablaHeader("No. MFG", 120)
                         TablaHeader("Descripción", 200)
                         TablaHeader("Costo", 100)
                         TablaHeader("Área", 120)
                         TablaHeader("No. Parte", 120)
-                        TablaHeader("Familia", 120)
-                        TablaHeader("Cantidad", 80)
                     }
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         registros.forEach { ref ->
@@ -55,13 +54,12 @@ fun AltasGlobalesScreen() {
                                 TablaCell(ref["id"]?.toString(), 60)
                                 TablaCell(ref["aprobacion_mtto"]?.toString(), 100)
                                 TablaCell(ref["aprobacion_planta"]?.toString(), 100)
-                                TablaCell(ref["numero_mfg"]?.toString(), 120) // 🔥 NUEVA CELDA
+                                TablaCell(ref["esta_cotizado"]?.toString(), 100) // 🔥 NUEVO
+                                TablaCell(ref["numero_mfg"]?.toString(), 120)
                                 TablaCell(ref["descripcion"]?.toString(), 200)
                                 TablaCell(ref["costo"]?.toString(), 100)
                                 TablaCell(ref["area"]?.toString(), 120)
                                 TablaCell(ref["numero_parte_proveedor"]?.toString(), 120)
-                                TablaCell(ref["familia"]?.toString(), 120)
-                                TablaCell(ref["cantidad"]?.toString(), 80)
                             }
                             Divider(color = Color.White.copy(alpha = 0.3f))
                         }

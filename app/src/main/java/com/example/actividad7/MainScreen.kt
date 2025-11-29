@@ -49,9 +49,14 @@ fun MainScreen() {
             items.add("Aprobaciones pendientes")
         }
 
-        // 🔥 ALMACENISTA (Rol 3) O Admin ven Pendientes MFG
+        // Almacenista o Admin ven MFG
         if (currentUser.rol == 3 || currentUser.rol == 0) {
             items.add("Pendientes MFG")
+        }
+
+        // 🔥 COMPRADOR (Rol 4) o Admin ven Cotizaciones
+        if (currentUser.rol == 4 || currentUser.rol == 0) {
+            items.add("Cotizaciones pendientes")
         }
 
         items.add("Cerrar Sesión")
@@ -122,8 +127,10 @@ fun MainScreen() {
                         "Altas Globales" -> AltasGlobalesScreen()
                         "Corregir refacciones" -> CorregirRefaccionesScreen(usuarioId = currentUser.id)
                         "Aprobaciones pendientes" -> AprobacionesPendientesScreen(userRole = currentUser.rol)
-                        // 🔥 NUEVA PANTALLA
                         "Pendientes MFG" -> PendientesMfgScreen()
+                        // 🔥 NUEVA PANTALLA
+                        "Cotizaciones pendientes" -> CotizacionesPendientesScreen()
+
                         "Notificaciones" -> NotificacionesScreen(
                             usuarioId = currentUser.id,
                             userRole = currentUser.rol,

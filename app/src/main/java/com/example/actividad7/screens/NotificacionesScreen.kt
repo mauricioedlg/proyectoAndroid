@@ -57,15 +57,11 @@ fun NotificacionesScreen(
                         mensaje = mensaje,
                         esRechazo = esRechazo,
                         onClick = {
-                            if (userRole == 1 || userRole == 2) {
-                                // Gerentes -> Aprobaciones
-                                onNavigate("Aprobaciones pendientes")
-                            } else if (userRole == 3) {
-                                // 🔥 Almacenista -> Pendientes MFG
-                                onNavigate("Pendientes MFG")
-                            } else {
-                                // Usuario -> Mis Altas
-                                onNavigate("Mis Altas")
+                            when (userRole) {
+                                1, 2 -> onNavigate("Aprobaciones pendientes") // Gerentes
+                                3 -> onNavigate("Pendientes MFG") // Almacenista
+                                4 -> onNavigate("Cotizaciones pendientes") // 🔥 Comprador
+                                else -> onNavigate("Mis Altas") // Usuario
                             }
                         }
                     )

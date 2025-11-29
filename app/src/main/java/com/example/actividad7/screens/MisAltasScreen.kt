@@ -39,25 +39,23 @@ fun MisAltasScreen(usuarioId: Int) {
                 Column {
                     Row(Modifier.background(Color(0xFF003366))) {
                         TablaHeader("ID", 80)
-                        TablaHeader("Aprob. MTTO", 120)
-                        TablaHeader("Aprob. PLANTA", 120)
-                        TablaHeader("No. MFG", 120) // 🔥 NUEVA COLUMNA
+                        TablaHeader("Aprob. MTTO", 100)
+                        TablaHeader("Aprob. PLANTA", 100)
+                        TablaHeader("Cotizado", 100) // 🔥 NUEVO
+                        TablaHeader("No. MFG", 120)
                         TablaHeader("Descripción", 200)
                         TablaHeader("Costo", 120)
-                        TablaHeader("Área", 140)
-                        TablaHeader("No. Parte", 150)
                     }
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         registros.forEach { ref ->
                             Row(Modifier.background(Color(0x22003366))) {
                                 TablaCell(ref["id"]?.toString(), 80)
-                                TablaCell(ref["aprobacion_mtto"]?.toString(), 120)
-                                TablaCell(ref["aprobacion_planta"]?.toString(), 120)
-                                TablaCell(ref["numero_mfg"]?.toString(), 120) // 🔥 NUEVA CELDA
+                                TablaCell(ref["aprobacion_mtto"]?.toString(), 100)
+                                TablaCell(ref["aprobacion_planta"]?.toString(), 100)
+                                TablaCell(ref["esta_cotizado"]?.toString(), 100) // 🔥 NUEVO
+                                TablaCell(ref["numero_mfg"]?.toString(), 120)
                                 TablaCell(ref["descripcion"]?.toString(), 200)
                                 TablaCell(ref["costo"]?.toString(), 120)
-                                TablaCell(ref["area"]?.toString(), 140)
-                                TablaCell(ref["numero_parte_proveedor"]?.toString(), 150)
                             }
                             Divider(color = Color.White.copy(alpha = 0.3f))
                         }
